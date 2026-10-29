@@ -1,6 +1,7 @@
 #include "graphics/Renderer.h"
 #include "graphics/BitmapFont.h"
 #include "cards/CardArt.h"
+#include "cards/CardImages.h"
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -57,7 +58,8 @@ GLuint Renderer::compile(GLenum type, const char* source) {
     }
     return shader;
 }
-void Renderer::initialize(const Tabletop& table) {
+void Renderer::initialize(const Tabletop& table,const std::filesystem::path& cacheRoot) {
+    definitions_=table.definitions();cacheRoot_=cacheRoot;
     gl_.load();
     // Application owns this renderer and calls shutdown even after partial setup.
     const GLuint vertex = compile(GL_VERTEX_SHADER, vertexSource);
@@ -154,24 +156,18 @@ void Renderer::initialize(const Tabletop& table) {
     gl_.BufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(vertices.size()*sizeof(Vertex)),vertices.data(),GL_STATIC_DRAW);
     layout(uiVao_,uiVbo_);
     gl_.BindVertexArray(0);
-    textures_.resize(table.definitions().size()+1);
-    glGenTextures(static_cast<GLsizei>(textures_.size()),textures_.data());
+    // Small textures load only when a front/back is actually visible. Keep
+    // one separate full-resolution inspection texture instead of 302 large ones.
+    textures_.resize(definitions_.size()+1,0);
     gl_.ActiveTexture(GL_TEXTURE0);
-    for(std::size_t i=0;i<textures_.size();++i) {
-        const auto image=makeCardImage(i<table.definitions().size() ? &table.definitions()[i]:nullptr);
-        glBindTexture(GL_TEXTURE_2D,textures_[i]);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,image.width,image.height,0,GL_RGBA,GL_UNSIGNED_BYTE,image.rgba.data());
-    }
     gl_.UseProgram(program_);
     gl_.Uniform1i(gl_.GetUniformLocation(program_,"imageTexture"),0);
     gl_.Uniform1i(useTextureLocation_,0);
     glEnable(GL_DEPTH_TEST);
 }
 void Renderer::shutdown() noexcept {
+    if(detailTexture_) {glDeleteTextures(1,&detailTexture_);detailTexture_=0;}
+    detailDefinition_.reset();
     if(!textures_.empty()) {glDeleteTextures(static_cast<GLsizei>(textures_.size()),textures_.data());textures_.clear();}
     if (uiVbo_) { gl_.DeleteBuffers(1,&uiVbo_); uiVbo_=0; }
     if (uiVao_) { gl_.DeleteVertexArrays(1,&uiVao_); uiVao_=0; }
@@ -209,8 +205,37 @@ void Renderer::drawPawn(const glm::mat4& vp,const Player& player) {
     }
     mesh(vp,Shape::Box,local(0,0.94F,0.329F),{0.11F,0.025F,0.025F},{0.35F,0.12F,0.21F},yaw);
 }
-GLuint Renderer::cardTexture(std::optional<std::size_t> definition) const {
-    return definition && *definition+1<textures_.size() ? textures_[*definition]:textures_.back();
+GLuint Renderer::uploadImage(const CardImage& image) {
+    GLuint texture=0;glGenTextures(1,&texture);glBindTexture(GL_TEXTURE_2D,texture);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,image.width,image.height,0,GL_RGBA,GL_UNSIGNED_BYTE,image.rgba.data());
+    return texture;
+}
+CardImage Renderer::sourceImage(std::optional<std::size_t> definition) const {
+    if(!definition || *definition>=definitions_.size()) return makeCardImage(nullptr);
+    const auto& d=definitions_[*definition];
+    if(!cacheRoot_.empty() && !d.scryfallId.empty()) {
+        for(const auto* extension:{".jpg",".png"})
+            if(auto image=loadCardImage(cacheRoot_/d.setId/(d.scryfallId+extension))) return std::move(*image);
+    }
+    return makeCardImage(&d);
+}
+GLuint Renderer::cardTexture(std::optional<std::size_t> definition,bool detailed) {
+    if(definition && *definition>=definitions_.size()) definition.reset();
+    if(detailed && definition) {
+        if(!detailTexture_ || detailDefinition_!=definition) {
+            const auto image=sourceImage(definition);
+            if(detailTexture_) glDeleteTextures(1,&detailTexture_);
+            detailTexture_=uploadImage(image);detailDefinition_=definition;
+        }
+        return detailTexture_;
+    }
+    const auto index=definition ? *definition:definitions_.size();
+    if(!textures_[index]) textures_[index]=uploadImage(resizeCardImage(sourceImage(definition),192,270));
+    return textures_[index];
 }
 void Renderer::cardFace(const glm::mat4& vp,glm::vec3 position,float angle,GLuint texture) {
     auto model=glm::translate(glm::mat4{1},position);
@@ -237,6 +262,7 @@ void Renderer::drawCards(const glm::mat4& vp,const Tabletop& table,const Tableto
         render(c.position,c.height+layout::cardThickness/2,c.angle+(c.tapped?1.57079633F:0),layout::cardThickness,
                cardTexture(table.visibleDefinition(id,viewer)),controls.selected(id),table.dragged(id));
     for(const auto& [id,p]:table.piles()) {
+        if(p.cards.empty()) continue;
         const float thickness=layout::cardThickness*static_cast<float>(std::max<std::size_t>(1,p.cards.size()));
         const auto definition=p.cards.empty()?std::nullopt:table.visibleDefinition(p.cards.back(),viewer);
         render(p.position,1.35F+thickness+(table.draggedPile(id)?0.15F:0),p.angle+(p.tapped?1.57079633F:0),thickness,
@@ -293,6 +319,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
             picture(r,cardTexture(table.visibleDefinition(id,controls.viewer())));
         }
         for(const auto& [id,p]:table.piles()) {
+            if(p.cards.empty()) continue;
             (void)id;
             const auto projected=vp*glm::vec4{p.position.x,1.45F+static_cast<float>(p.cards.size())*layout::cardThickness,p.position.z,1};
             if(projected.w>0) appendText(text,std::to_string(p.cards.size()),(projected.x/projected.w+1)*w/2,
@@ -320,7 +347,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
     if(active) if(const auto inspected=controls.inspected()) {
         const float ih=std::min(h-100*s,720*s),iw=ih*0.7F;
         panel({(w-iw)/2-14*s,30*s,iw+28*s,ih+56*s},dark);
-        picture({(w-iw)/2,42*s,iw,ih},cardTexture(table.visibleDefinition(*inspected,controls.viewer())));
+        picture({(w-iw)/2,42*s,iw,ih},cardTexture(table.visibleDefinition(*inspected,controls.viewer()),true));
         text.clear();appendText(text,controls.inspectionCaption(),(w-iw)/2,ih+56*s,1.5F*s);batch(text,white);
     }
     if(paused) {

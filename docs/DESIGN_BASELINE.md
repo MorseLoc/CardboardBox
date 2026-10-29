@@ -53,6 +53,13 @@ with the source so later implementation steps retain the project's direction.
    gaps. Both seats face across the long edges. G now shows 200 reference
    shapes. This remains a capacity guide, not an enforced grid or card limit.
 
+9. The user supplied an MTGJSON Unlimited (`2ED`) export with 302 printings.
+   Version 0.2.2 imports its metadata, preserves original/current text separately,
+   and loads locally cached exact-printing images using a one-time Windows
+   downloader. Missing images use labeled text fallbacks. Beta remains pending
+   its own input. This is a content step before Phase 3, not a shop, collection,
+   or networking implementation. See `UNLIMITED_IMPORT.md`.
+
 ## 1–5. Vision and room
 
 - Private native Windows PC game for exactly two people using the same

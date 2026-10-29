@@ -29,7 +29,7 @@ public:
     void cancel();
     int viewer() const {return viewer_;}
     const std::vector<CardId>& selected() const {return selected_;}
-    PileId selectedPile() const {return selectedPile_;}
+    PileId selectedPile() const {const auto* p=table_.pile(selectedPile_);return p && !p->cards.empty() ? selectedPile_:0;}
     bool selected(CardId id) const;
     bool menuOpen() const {return menuOpen_;}
     UiRect menuRect() const;

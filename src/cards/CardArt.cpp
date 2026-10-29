@@ -26,12 +26,25 @@ void text(CardImage& image,std::string_view value,int x,int y,int size,Vec3 colo
     std::vector<RenderVertex> vertices;appendText(vertices,value,static_cast<float>(x),static_cast<float>(y),static_cast<float>(size));
     for(std::size_t i=0;i<vertices.size();i+=6) rectangle(image,static_cast<int>(vertices[i].x),static_cast<int>(vertices[i].y),size,size,color);
 }
-std::string wrap(std::string_view value) {
+std::string displayText(std::string value) {
+    const std::pair<std::string,std::string> replacements[]={{"—","-"},{"–","-"},{"’","'"},{"‘","'"},{"“","\""},{"”","\""},{"…","..."}};
+    for(const auto& [from,to]:replacements) {
+        std::size_t at=0;
+        while((at=value.find(from,at))!=std::string::npos) {value.replace(at,from.size(),to);at+=to.size();}
+    }
+    std::string result;
+    for(unsigned char c:value) {
+        if(c<128) result+=static_cast<char>(c);
+        else if((c&0xC0)!=0x80) result+='?';
+    }
+    return result;
+}
+std::string wrap(std::string_view value,int columns=25) {
     std::istringstream lines{std::string(value)};std::string line,result;
     while(std::getline(lines,line)) {
         std::istringstream words{line};std::string word;int length=0;
         while(words>>word) {
-            if(length && length+1+static_cast<int>(word.size())>25) {result+='\n';length=0;}
+            if(length && length+1+static_cast<int>(word.size())>columns) {result+='\n';length=0;}
             if(length) {result+=' ';++length;}
             result+=word;length+=static_cast<int>(word.size());
         }
@@ -55,7 +68,24 @@ CardImage makeCardImage(const CardDefinition* definition) {
     const auto& d=*definition;
     rectangle(image,12,12,488,696,d.color);
     rectangle(image,24,24,464,38,{0.96F,0.90F,0.78F});
-    text(image,d.name,32,32,3,ink);text(image,d.cost,424,32,3,ink);
+    std::string cost=d.cost;
+    for(auto& c:cost) if(c=='{' || c=='}') c=' ';
+    std::istringstream tokens{cost};cost.clear();std::string token;
+    while(tokens>>token) {if(!cost.empty()) cost+=' ';cost+=token;}
+    text(image,displayText(d.name),32,34,2,ink);text(image,cost,392,34,2,ink);
+    if(!d.setId.empty()) {
+        // Explicit metadata-only fallback. Do not present invented artwork as a scan.
+        rectangle(image,24,78,464,128,{0.15F,0.20F,0.29F});
+        text(image,"ARTWORK NOT DOWNLOADED",50,102,2,{0.98F,0.86F,0.73F});
+        text(image,"RUN DOWNLOAD-CARDIMAGES.PS1",40,152,2,{0.98F,0.86F,0.73F});
+        rectangle(image,24,222,464,38,{0.96F,0.90F,0.78F});
+        text(image,displayText(d.type),32,234,2,ink);
+        rectangle(image,24,274,464,412,{0.96F,0.90F,0.78F});
+        text(image,wrap(displayText(d.rules),37),32,292,2,ink);
+        text(image,d.power,416,656,3,ink);
+        text(image,d.setId+" #"+d.collectorNumber+" / TEXT FALLBACK",32,694,2,{1,0.94F,0.86F});
+        return image;
+    }
     // Original procedural placeholder illustration: a moonlit pawn in a
     // landscape, recolored for each definition. No external art/database used.
     CardImage art=image;

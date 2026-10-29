@@ -5,6 +5,74 @@ clubhouse. The table now fits **20 cards wide by 10 cards deep**, with both
 chairs facing each other across the long edges. It remains a free tabletop;
 this capacity guide does not enforce placement or limit the number of cards.
 
+## Version 0.2.2: Unlimited data and real image loading
+
+Your supplied **MTGJSON `2ED.json`** has been imported: 302 Unlimited printings,
+15 basic-land artwork variants, rarity metadata, original printed-text fields,
+current rules text kept separately, and the set's booster recipe/sheet data.
+It is not Scryfall's JSON format, but every record has a Scryfall printing ID.
+There are no image bytes or direct image URLs in the supplied file.
+
+The test libraries now use Unlimited definitions instead of the eight invented
+cards. These are temporary 60-card demo lists, not a saved collection or a
+new deck builder. Both sides still have 24 basic lands and 36 other cards.
+The 20-wide/10-deep table and the empty-pile fix are retained.
+
+**Original scans are not included in this ZIP.** The game displays explicitly
+labeled text fallback faces until you download the images on your Windows PC:
+
+1. Close the game and copy the archive's root contents into your existing
+   project root, replacing matching files, including `tools` and `data`.
+2. Select windows-debug and let CMake reconfigure. The manifest adds **stb**, a
+   small header-only image decoder installed automatically through your existing
+   vcpkg setup. No Python, extra DLL, or manual image-library installation is
+   required for building or playing.
+3. In Visual Studio's Developer PowerShell at the project root, run:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Download-CardImages.ps1
+   ```
+
+4. Let the downloader finish, then Build All and F5. If you already ran the
+   game before downloading, close and relaunch it to refresh cached textures.
+
+The downloader looks up each exact Unlimited printing, retrieves its full-card
+image URL, validates the returned set/ID, downloads JPEG/PNG images with pacing
+and retries, and skips valid-looking files already cached. Rerun to resume.
+`-Force` replaces existing cached files; `-Limit 3` is available for a small
+connection test. Images are stored in your per-user cache:
+
+```text
+%APPDATA%\FemboyLover\Clubhouse\cards\2ed
+```
+
+The game uses the matching SDL preference path. Your source/installation folder
+is not used for writable image caching. `download-report.json` records failures.
+Missing or corrupt files keep their readable fallback rather than preventing
+launch. Live image downloads and the PowerShell script could not be executed
+in the authoring environment; this one-time step needs your Windows internet
+connection. The game makes no image requests during normal play.
+
+Only Unlimited was supplied. Beta artwork/printing variants are not added by
+this file. See **docs/UNLIMITED_IMPORT.md** for field mapping, reproducibility,
+image-cache details, and the Windows verification checklist.
+
+## Version 0.2.1: empty-pile fix
+
+Player-made piles now disappear when their last card is drawn, moved to a hand,
+returned to a library, or merged into another pile. Empty piles no longer draw
+a card back or zero label, cannot be picked/dragged, and do not support cards
+as invisible stacks. A deleted pile is cleared from selection.
+
+The two original libraries also disappear visually at zero cards. Their return
+addresses remain internally so L / Shift+L can refill them at their remembered
+positions. This does not retain a visible or clickable zero-card object.
+
+To reproduce the fix: play one card, select it, B to group it, then double-click
+that pile to draw its last card. The pile should vanish. Also try merging a
+whole pile into another. The losing/source pile should disappear without
+losing any card copies. Build instructions and dependencies are unchanged.
+
 ## Upgrade your working project
 
 1. Close the game and keep a backup of your working project folder.
@@ -23,7 +91,7 @@ this capacity guide does not enforce placement or limit the number of cards.
    RoomTests, CardTests, or CameraTests for playing the game.
 5. Repeat with **windows-release** once Debug works.
 
-**No new third-party dependencies.** Keep your existing vcpkg installation,
+**One new header-only dependency (`stb`), installed automatically.** Keep your existing vcpkg installation,
 `VCPKG_ROOT`, SDL3/GLM baseline, and presets. This is complete source, not a
 precompiled Windows executable. Output remains under `out/build/windows-debug`
 or `out/build/windows-release`, with SDL3.dll copied beside the game.
@@ -32,7 +100,7 @@ or `out/build/windows-release`, with SDL3.dll copied beside the game.
 
 1. Walk toward the near chair and press **E** when prompted.
 2. There are two card-back piles on the table, initially labeled **60**. They
-   are original test decks: 24 basic lands and 36 other cards per deck.
+   are temporary Unlimited demo decks: 24 basic lands and 36 other cards per deck.
 3. Press **Shift+D** to draw seven from your own library. Your hand appears
    along the bottom. Or double-click your near-side library to draw one.
 4. Drag a hand thumbnail onto the felt. It becomes a public face-up card.
@@ -101,7 +169,7 @@ order; pile storage is bottom-to-top, and drawing removes its last element.
 ## What's implemented
 
 - Separate reusable card definitions and uniquely identified session copies.
-- Original generated card fronts and shared backs with readable printed text.
+- Exact-printing image-cache loading, labeled metadata fallback fronts, and an original shared back.
 - Actual camera-ray intersections with rotated card/pile rectangles.
 - Selection, multi-selection, dragging, lift/shadow feedback, surface stacking,
   tapping, free rotation increments, face flipping, and enlarged inspection.
@@ -122,7 +190,11 @@ Use the physical actions to carry out what the players agree to do.
 | --- | --- |
 | `src/cards/Tabletop.h/.cpp` | Session card/pile data, ordering, movement, visibility, draw/shuffle/split/merge operations and invariants |
 | `src/cards/TabletopController.h/.cpp` | Selection, mouse gestures, hand/context-menu hit tests, inspection and keyboard actions |
-| `src/cards/CardArt.h/.cpp` | Original procedural RGBA fronts/backs; no installed art paths |
+| `src/cards/CardArt.h/.cpp` | Readable fallback fronts and an original shared back |
+| `src/cards/CardCatalog.h/.cpp` and `UnlimitedCards.inc` | Imported 302-printing catalog and demo-list construction |
+| `src/cards/CardImages.h/.cpp` | Validated JPEG/PNG decoding and small texture creation |
+| `tools/Download-CardImages.ps1` | One-time exact-printing image downloader for Windows |
+| `tools/import_mtgjson.py` | Optional reproducible source-data converter; not needed for builds |
 | `src/graphics/Camera.h/.cpp` | Existing cameras plus screen-to-world rays |
 | `src/graphics/Renderer.h/.cpp` | 3D cards, texture upload, highlights, hand thumbnails, menus and inspection |
 | `src/graphics/GlApi.h/.cpp` | Adds typed texture-unit/uniform entry points |
@@ -161,7 +233,7 @@ Repeat with `windows-release` after building Release. Tests do not rely on
 assert, so their checks remain active in Release.
 
 Authoring checks include native C++20 compilation of the logic tests, full
-application-source syntax checking against the pinned SDL3 3.2.22 / GLM 1.0.1
+application-source syntax checking against the pinned SDL3 3.2.22 / GLM 1.0.1 / stb
 headers, and actual off-screen OpenGL rendering of the real renderer, shaders,
 textures, HUD, inspection and room using a separate EGL harness. That harness
 substitutes only the context/function-loading setup; it does not exercise the
@@ -192,9 +264,9 @@ piles are ordered containers. Cards may be dragged outside the felt, retaining
 the tabletop working-plane height; they do not fall or throw yet. C recalls a
 selected off-table object. There is no rigid-body card physics in this phase.
 
-The eight definitions and illustrations are original placeholders. Beta/Unlimited
-content remains the intended later card pool. No official MTG art/database is
-bundled, and no spell text is automatically interpreted.
+The Unlimited definitions come from your supplied file. Image downloads remain
+a separate per-PC setup step, and the shared card back remains original. Beta
+printings are not imported yet. No spell text is automatically interpreted.
 
 After both Windows builds pass the checklist, Phase 3 adds the private
 host/client connection, authoritative ordering, simultaneous-grab handling,

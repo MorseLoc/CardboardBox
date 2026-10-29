@@ -1,5 +1,10 @@
 # Phase 2 implementation notes
 
+**Version 0.2.2 update:** Unlimited data now replaces the initial invented card
+set, and cached JPEG/PNG images replace fallbacks when available. See
+`UNLIMITED_IMPORT.md`; the original implementation narrative below remains
+historical where it describes the eight placeholder definitions.
+
 ## Scope and changed layout
 
 The user approved the working clubhouse and changed the capacity request to
@@ -30,7 +35,9 @@ session IDs are not a substitute for the permanent owned-copy IDs in Phase 5.
 `CardPile` is a bottom-to-top vector of existing IDs. Drawing removes back(),
 shuffling changes only order, splitting moves the top half into a second
 container, and merge/return detach old membership before adding new membership.
-Empty pile anchors remain so an emptied library can receive returned cards.
+Empty player-made piles are deleted after a complete ownership-neutral move.
+Only the two original-library anchors remain internally for returns; when empty,
+they are not rendered, labeled, picked, dragged, or used as stacking support.
 `valid()` checks that every piled card belongs to exactly one corresponding
 pile and every definition/hand reference is valid.
 
@@ -149,3 +156,25 @@ Run in Debug and Release:
 If these pass, the next milestone is Phase 3: authoritative host/client ENet
 networking using the planned private Tailscale IP connection. Do not call the
 current local prototype a connected two-player game.
+
+## Version 0.2.1 regression fix
+
+The previous renderer used max(1, pile size), which gave an empty container a
+one-card body/back, while the HUD still printed zero. Custom containers also
+remained in the model after their final card moved out.
+
+The fix deletes emptied custom piles only after a complete draw/move/merge,
+so a return to the same pile is not interrupted midway through detach/add.
+Picking, dragging, rendering, labels and stacking all ignore empty original
+library anchors. The controller clears a selection whose pile has disappeared.
+No physical card instance is deleted, and emptied libraries still accept
+returns. New CardTests cover last-card draws, hand moves, library returns,
+same-pile returns, merge-source deletion, non-pickable empty libraries,
+refill/reappearance and stale selection, preserving all 120 copies.
+
+The next phase remains the GDD's Phase 3: private host/join, version agreement,
+two synchronized pawns and seats, authoritative card/pile actions, per-client
+hidden-information filtering, temporary manipulation locks, disconnection and
+reconnection. Two separate Windows computers are needed for its final test.
+Shop, persistent collections, ante, physical throws and face painting keep
+their later milestones; they are not added by this bug fix.

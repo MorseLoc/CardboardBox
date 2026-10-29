@@ -17,6 +17,8 @@ std::optional<Vec2> onPlane(const Ray& ray,float y);
 struct CardDefinition {
     std::string id,name,type,cost,rules,power;
     Vec3 color;
+    std::string setId{},rarity{},collectorNumber{},scryfallId{},oracleText{},colorIdentity{};
+    bool basicLand=false;
 };
 enum class CardZone { Table,Hand,Pile };
 struct CardInstance {
@@ -71,6 +73,7 @@ public:
     bool valid() const;
 private:
     void detach(CardId id);
+    void removeEmptyPiles();
     void settle(CardInstance& card);
     std::vector<CardDefinition> definitions_;
     std::map<CardId,CardInstance> cards_;

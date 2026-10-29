@@ -145,6 +145,7 @@ bool TabletopController::wheel(float amount,float x,float y) {
 void TabletopController::action(TableAction action) {
     if(viewer_<0 || inspectionOpen() || table_.dragging()) return;
     menuOpen_=false;pressed_=false;
+    selectedPile_=selectedPile();
     const auto target=selectedPile_ ? selectedPile_:table_.library(viewer_);
     switch(action) {
     case TableAction::Tap: table_.tap(selected_,selectedPile_);break;
@@ -165,6 +166,7 @@ void TabletopController::action(TableAction action) {
         else if(!selected_.empty()) {if(const auto* c=table_.card(selected_.front());c && table_.beginDrag(selected_,0,c->position)) {table_.moveDrag({0,0});table_.finishDrag();}}
         break;
     }
+    selectedPile_=selectedPile(); // Drawing/merging the last card may delete it.
     handOffset_=std::clamp(handOffset_,0,std::max(0,static_cast<int>(table_.hand(viewer_).size())-TableUiLayout{width_,height_}.handSlots()));
 }
 bool TabletopController::escape() {

@@ -5,6 +5,9 @@
 #include <cmath>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <memory>
+#include <filesystem>
 
 namespace fl {
 namespace {
@@ -21,7 +24,7 @@ Application::~Application() {
 }
 void Application::initialize() {
     SDL_SetMainReady(); // We supply a normal C++ main instead of SDL's wrapper.
-    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.2.0", "private.femboylover.clubhouse"), "Set metadata");
+    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.2.2", "private.femboylover.clubhouse"), "Set metadata");
     requireSdl(SDL_Init(SDL_INIT_VIDEO), "Initialize SDL3");
     sdlStarted_ = true;
     requireSdl(SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3), "Set GL major");
@@ -39,7 +42,12 @@ void Application::initialize() {
     if (!SDL_GL_SetSwapInterval(1)) SDL_Log("VSync unavailable: %s", SDL_GetError());
     SDL_Log("OpenGL: %s | Renderer: %s", reinterpret_cast<const char*>(glGetString(GL_VERSION)),
             reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
-    renderer_.initialize(table_);
+    std::unique_ptr<char,decltype(&SDL_free)> pref{SDL_GetPrefPath("FemboyLover","Clubhouse"),SDL_free};
+    if(!pref) throw std::runtime_error(std::string{"Card cache path: "}+SDL_GetError());
+    const std::string_view utf8Pref{pref.get()};
+    const std::filesystem::path prefPath{std::u8string(utf8Pref.begin(),utf8Pref.end())};
+    renderer_.initialize(table_,prefPath/"cards");
+    SDL_Log("Card cache root: %s",pref.get());
     camera_.update(0.0F, player_.position(), player_.seat(), room_, true);
     SDL_Log("WASD: move | Shift: run | RMB-drag: camera / table pan | wheel: zoom | E: sit/stand | Esc: stand/pause | Q: quit while paused");
 }

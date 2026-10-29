@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
-project(FemboyLover VERSION 0.2.0 LANGUAGES CXX)
+project(FemboyLover VERSION 0.2.2 LANGUAGES CXX)
 
 find_package(SDL3 3.2 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(Stb REQUIRED)
 find_package(OpenGL REQUIRED)
 
 add_library(ClubhouseWorld STATIC
+    src/cards/CardCatalog.cpp
     src/cards/Tabletop.cpp
     src/cards/TabletopController.cpp
     src/world/Geometry.cpp
@@ -19,6 +21,7 @@ set_target_properties(ClubhouseWorld PROPERTIES CXX_EXTENSIONS OFF)
 add_executable(FemboyLover
     src/main.cpp
     src/core/Application.cpp
+    src/cards/CardImages.cpp
     src/cards/CardArt.cpp
     src/graphics/BitmapFont.cpp
     src/graphics/Camera.cpp
@@ -28,6 +31,7 @@ add_executable(FemboyLover
 target_compile_features(FemboyLover PRIVATE cxx_std_20)
 set_target_properties(FemboyLover PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(FemboyLover PRIVATE src)
+target_include_directories(FemboyLover SYSTEM PRIVATE ${Stb_INCLUDE_DIR})
 target_link_libraries(FemboyLover PRIVATE ClubhouseWorld SDL3::SDL3 glm::glm OpenGL::GL)
 target_compile_definitions(FemboyLover PRIVATE SDL_MAIN_HANDLED GLM_FORCE_RADIANS NOMINMAX WIN32_LEAN_AND_MEAN)
 if(MSVC)
@@ -53,8 +57,10 @@ if(BUILD_TESTING)
     target_link_libraries(RoomTests PRIVATE ClubhouseWorld)
     set_target_properties(RoomTests PROPERTIES CXX_EXTENSIONS OFF)
     add_test(NAME clubhouse-world COMMAND RoomTests)
-    add_executable(CardTests tests/CardTests.cpp src/cards/CardArt.cpp src/graphics/BitmapFont.cpp)
+    add_executable(CardTests tests/CardTests.cpp src/cards/CardImages.cpp src/cards/CardArt.cpp src/graphics/BitmapFont.cpp)
     target_link_libraries(CardTests PRIVATE ClubhouseWorld)
+    target_include_directories(CardTests SYSTEM PRIVATE ${Stb_INCLUDE_DIR})
+    target_compile_definitions(CardTests PRIVATE FL_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
     set_target_properties(CardTests PROPERTIES CXX_EXTENSIONS OFF)
     add_test(NAME physical-tabletop COMMAND CardTests)
     add_executable(CameraTests tests/CameraTests.cpp src/graphics/Camera.cpp)

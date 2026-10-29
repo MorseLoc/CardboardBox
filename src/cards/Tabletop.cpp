@@ -1,4 +1,5 @@
 #include "cards/Tabletop.h"
+#include "cards/CardCatalog.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -34,23 +35,13 @@ std::optional<Vec2> onPlane(const Ray& ray,float y) {
     return Vec2{ray.origin.x+t*ray.direction.x,ray.origin.z+t*ray.direction.z};
 }
 Tabletop::Tabletop(std::uint32_t seed):rng_(seed) {
-    definitions_={
-        {"test_001","MOSSY FRIEND","CREATURE","2G","A patient little forest creature.\nPlayers resolve all abilities manually.","2/3",{0.24F,0.54F,0.34F}},
-        {"test_002","MIDNIGHT MOTH","CREATURE","1U","Flying.\nLikes lamps more than winning.","1/2",{0.29F,0.40F,0.70F}},
-        {"test_003","SOFA DRAGON","CREATURE","3R","Flying.\nTap: dramatically claim the sofa.","4/3",{0.76F,0.31F,0.27F}},
-        {"test_004","TIN KNIGHT","CREATURE","2W","A tiny knight with a huge helmet.","2/2",{0.80F,0.70F,0.43F}},
-        {"test_005","TEA BREAK","SPELL","U","Draw two cards.\nResolve this yourself with draw actions.","",{0.32F,0.57F,0.65F}},
-        {"test_006","BAD IDEA","SPELL","R","Do something extremely questionable.\nAgree on the result with your friend.","",{0.66F,0.30F,0.52F}},
-        {"test_007","QUIET GROVE","BASIC LAND","","Tap: add one green mana.\nThe software does not track mana.","",{0.28F,0.48F,0.29F}},
-        {"test_008","SLEEPY SHORE","BASIC LAND","","Tap: add one blue mana.\nThe software does not track mana.","",{0.28F,0.44F,0.64F}}
-    };
+    definitions_=unlimitedDefinitions();
     for (int owner=0;owner<2;++owner) {
         const PileId id=nextPile_++;
         CardPile p{id,owner,{-2.8F,owner==0 ? 1.7F : -1.7F},{}};
         p.angle=owner==1 ? pi:0;
-        for (int i=0;i<60;++i) {
+        for(const auto def:unlimitedDemoDeck(definitions_,owner)) {
             const CardId cid=nextCard_++;
-            const std::size_t def=i<24 ? static_cast<std::size_t>(6+i%2) : static_cast<std::size_t>((i-24)%6);
             CardInstance c{cid,def,owner}; c.pile=id;c.order=nextOrder_++;
             cards_.emplace(cid,c);p.cards.push_back(cid);
         }
@@ -66,8 +57,8 @@ std::vector<CardId> Tabletop::hand(int viewer) const {
     return result;
 }
 PileId Tabletop::library(int viewer) const {
-    // Original library IDs remain stable if emptied; piles are not erased while
-    // empty, so cards can still be returned after drawing the whole deck.
+    // Keep invisible original-library anchors so top/bottom returns still work
+    // after drawing the whole deck. Empty player-made piles are deleted.
     const PileId id=viewer==0 ? 1U : (viewer==1 ? 2U : 0U);
     return pile(id) ? id : 0;
 }
@@ -87,7 +78,7 @@ TableHit Tabletop::pick(const Ray& ray,bool ignoreDragged) const {
     };
     for (const auto& [id,c]:cards_) if (c.zone==CardZone::Table && !(ignoreDragged && dragged(id)))
         consider(c.height+layout::cardThickness/2,c.position,orientation(c),id,0,c.order);
-    for (const auto& [id,p]:piles_) if (!(ignoreDragged && draggedPile(id))) {
+    for (const auto& [id,p]:piles_) if (!p.cards.empty() && !(ignoreDragged && draggedPile(id))) {
         const float height=1.35F+layout::cardThickness*static_cast<float>(std::max<std::size_t>(1,p.cards.size()));
         consider(height,p.position,orientation(p),0,id,0);
     }
@@ -101,6 +92,11 @@ void Tabletop::detach(CardId id) {
     }
     c.pile=0;c.handOwner=-1;
 }
+void Tabletop::removeEmptyPiles() {
+    // Run only after a complete move, never midway through detach/add. A return
+    // to the same pile may temporarily empty its vector before filling it again.
+    std::erase_if(piles_,[](const auto& entry){return entry.first>2 && entry.second.cards.empty();});
+}
 std::size_t Tabletop::draw(PileId id,int viewer,std::size_t count) {
     if (dragging() || viewer<0 || viewer>1 || !pile(id)) return 0;
     auto& p=piles_.at(id);
@@ -110,6 +106,7 @@ std::size_t Tabletop::draw(PileId id,int viewer,std::size_t count) {
         auto& c=cards_.at(p.cards.back());p.cards.pop_back();
         c.zone=CardZone::Hand;c.handOwner=viewer;c.pile=0;c.faceUp=true;c.tapped=false;c.angle=0;c.order=nextOrder_++;
     }
+    removeEmptyPiles();
     return n;
 }
 bool Tabletop::shuffle(PileId id) {
@@ -138,6 +135,7 @@ bool Tabletop::toHand(std::span<const CardId> ids,int viewer) {
     if (dragging() || viewer<0 || viewer>1 || ids.empty()) return false;
     for (auto id:ids) if (!card(id)) return false;
     for (auto id:ids) {detach(id);auto& c=cards_.at(id);c.zone=CardZone::Hand;c.handOwner=viewer;c.faceUp=true;c.tapped=false;c.order=nextOrder_++;}
+    removeEmptyPiles();
     return true;
 }
 bool Tabletop::toPile(std::span<const CardId> ids,PileId target,bool bottom) {
@@ -149,6 +147,7 @@ bool Tabletop::toPile(std::span<const CardId> ids,PileId target,bool bottom) {
     if (bottom) p.cards.insert(p.cards.begin(),ids.begin(),ids.end());
     else p.cards.insert(p.cards.end(),ids.begin(),ids.end());
     for (auto id:ids) {auto& c=cards_.at(id);c.zone=CardZone::Pile;c.pile=target;c.tapped=false;c.faceUp=!p.hidden;}
+    removeEmptyPiles();
     return true;
 }
 void Tabletop::tap(std::span<const CardId> ids,PileId pid) {
@@ -165,7 +164,11 @@ void Tabletop::rotate(std::span<const CardId> ids,PileId pid,float radians) {
 }
 bool Tabletop::beginDrag(std::span<const CardId> ids,PileId pid,Vec2 anchor) {
     if (dragging()) return false;
-    if (pid && pile(pid)) dragPile_=*pile(pid);
+    if (pid) {
+        const auto* p=pile(pid);
+        if(!p || p->cards.empty()) return false;
+        dragPile_=*p;
+    }
     else {
         if (ids.empty()) return false;
         std::set<CardId> unique(ids.begin(),ids.end());if (unique.size()!=ids.size()) return false;
@@ -191,7 +194,7 @@ void Tabletop::settle(CardInstance& c) {
     c.height=layout::cardCenterY;
     for(const auto& [id,other]:cards_) if(id!=c.id && other.zone==CardZone::Table && !dragged(id) && overlapping(c.position,orientation(c),other.position,orientation(other)))
         c.height=std::max(c.height,other.height+layout::cardThickness);
-    for(const auto& [id,p]:piles_) if(!draggedPile(id) && overlapping(c.position,orientation(c),p.position,orientation(p)))
+    for(const auto& [id,p]:piles_) if(!p.cards.empty() && !draggedPile(id) && overlapping(c.position,orientation(c),p.position,orientation(p)))
         c.height=std::max(c.height,1.35F+layout::cardThickness*static_cast<float>(std::max<std::size_t>(1,p.cards.size()))+layout::cardThickness/2);
 }
 void Tabletop::finishDrag(PileId target) {
@@ -218,6 +221,7 @@ void Tabletop::cancelDrag() {
 }
 bool Tabletop::valid() const {
     std::set<CardId> contained;
+    for(const auto& [id,p]:piles_) if(id>2 && p.cards.empty()) return false;
     for(const auto& [id,p]:piles_) for(auto cid:p.cards) {
         const auto* c=card(cid);
         if(!c || c->zone!=CardZone::Pile || c->pile!=id || !contained.insert(cid).second) return false;

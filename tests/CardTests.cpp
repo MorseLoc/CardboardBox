@@ -1,5 +1,8 @@
 #include "cards/TabletopController.h"
 #include "cards/CardArt.h"
+#include "cards/CardImages.h"
+#include "cards/CardCatalog.h"
+#include <filesystem>
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
@@ -31,7 +34,7 @@ void stateTests() {
     const auto group=t.group(hand);check(group && t.pile(group)->cards==hand && t.valid(),"Group ordering/membership failed");
     const auto split=t.split(group);check(split && t.valid() && t.pile(group)->cards.size()+t.pile(split)->cards.size()==7,"Split duplicated/lost cards");
     check(t.beginDrag({},split,t.pile(split)->position),"Pile drag failed");t.moveDrag(t.pile(group)->position);t.finishDrag(group);
-    check(t.valid() && t.pile(group)->cards.size()==7 && t.pile(split)->cards.empty(),"Pile merge invalid");
+    check(t.valid() && t.pile(group)->cards.size()==7 && !t.pile(split),"Pile merge invalid");
     auto sorted=t.pile(group)->cards;std::sort(sorted.begin(),sorted.end());
     t.shuffle(group);auto shuffled=t.pile(group)->cards;std::sort(shuffled.begin(),shuffled.end());check(sorted==shuffled,"Shuffle changed membership");
     const auto order=t.pile(group)->cards;
@@ -80,6 +83,68 @@ void oppositeSeatTest() {
     check(std::abs(t.card(id)->angle-3.14159265F)<0.001F,"Opposite side plays cards upside-down");
     check(t.card(id)->owner==1 && t.visibleDefinition(id,0) && t.valid(),"Opposite-side play changed owner/visibility");
 }
+void emptyPileTests() {
+    fl::Tabletop t{7};
+    const auto makePile=[&](std::size_t count) {
+        check(t.draw(1,0,count)==count,"Could not prepare pile regression");
+        const auto ids=t.hand(0);check(t.beginDrag(ids,0,{0,0}),"Could not play regression cards");
+        t.moveDrag({0,0});t.finishDrag();
+        const auto pid=t.group(ids);check(pid!=0,"Could not group regression cards");return pid;
+    };
+    auto pid=makePile(1);
+    check(t.pick(ray(0,0)).pile==pid,"Nonempty pile must remain selectable");
+    fl::TabletopController ui{t};ui.setViewer(0);
+    ui.leftDown(640,300,ray(0,0),false,false);ui.leftUp(640,300,ray(0,0),false);
+    ui.action(fl::TableAction::Draw);
+    check(!t.pile(pid) && !ui.selectedPile(),"Last draw left an empty pile or stale selection");
+    check(!t.pick(ray(0,0)).pile,"Deleted pile is still selectable");
+    auto ids=t.hand(0);check(t.toPile(ids,1,false),"Could not reset regression hand");
+    pid=makePile(3);ids=t.pile(pid)->cards;
+    check(t.toHand(ids,0) && !t.pile(pid),"Moving all cards to hand left a ghost pile");
+    ids=t.hand(0);t.toPile(ids,1,false);
+    pid=makePile(2);ids=t.pile(pid)->cards;
+    check(t.toPile(ids,pid,false) && t.pile(pid)->cards.size()==2,"Same-pile return deleted its destination midway");
+    check(t.toPile(ids,1,false) && !t.pile(pid),"Returning all cards to library left a ghost pile");
+    const auto position=t.pile(1)->position;
+    check(t.draw(1,0,60)==60 && t.library(0)==1,"Empty library lost its return address");
+    check(!t.pick(ray(position.x,position.z)).pile,"Empty library still has a clickable placeholder");
+    check(!t.beginDrag({},1,position),"Invisible empty library can still be dragged");
+    const auto first=t.hand(0).front();check(t.toPile({&first,1},1,false),"Could not return a card to empty library");
+    check(t.pick(ray(position.x,position.z)).pile==1,"Refilled library did not reappear for picking");
+    check(t.cards().size()==120 && t.valid(),"Empty-pile cleanup lost card instances");
+}
+void importedCatalogTests() {
+    fl::Tabletop t{11};const auto& definitions=t.definitions();
+    check(definitions.size()==302,"Unlimited import lost printings");
+    std::set<std::string> ids,printingIds;int basics=0,commons=0,uncommons=0,rares=0;
+    bool foundChaosOrb=false,foundLotus=false;
+    for(const auto& d:definitions) {
+        check(d.setId=="2ed" && !d.name.empty(),"Wrong/missing set metadata");
+        check(ids.insert(d.id).second && printingIds.insert(d.scryfallId).second,"Duplicate imported IDs");
+        basics+=d.basicLand ? 1:0;commons+=d.rarity=="common" ? 1:0;uncommons+=d.rarity=="uncommon" ? 1:0;rares+=d.rarity=="rare" ? 1:0;
+        foundChaosOrb|=d.name=="Chaos Orb";foundLotus|=d.name=="Black Lotus";
+    }
+    check(basics==15 && commons==90 && uncommons==95 && rares==117,"Imported rarity/basic-land counts differ from source");
+    check(foundChaosOrb && foundLotus,"Required Unlimited cards missing");
+    for(int side:{0,1}) {
+        const auto deck=fl::unlimitedDemoDeck(definitions,side);check(deck.size()==60,"Imported test deck has wrong size");
+        int lands=0;for(auto index:deck) {check(index<definitions.size(),"Invalid deck definition index");lands+=definitions[index].basicLand?1:0;}
+        check(lands==24,"Imported test deck lost its basic lands");
+    }
+}
+void imageFileTests() {
+    const std::filesystem::path root{FL_TEST_DATA_DIR};
+    for(const auto* name:{"card-test.jpg","card-test.png"}) {
+        const auto image=fl::loadCardImage(root/name);
+        check(image && image->width==32 && image->height==48,"JPEG/PNG decode failed");
+        check(image->rgba[0]>240 && image->rgba[2]<20,"Image top row was flipped or recolored");
+        const auto last=image->rgba.size()-4;check(image->rgba[last]<20 && image->rgba[last+2]>240,"Image bottom row wrong");
+        const auto small=fl::resizeCardImage(*image,16,24);
+        check(small.rgba.size()==16*24*4 && small.rgba[0]>240,"Small texture generation failed");
+    }
+    check(!fl::loadCardImage(root/"bad-image.jpg"),"Corrupt image accepted");
+    check(!fl::loadCardImage(root/"not-present.png"),"Missing image accepted");
+}
 void images() {
     fl::Tabletop t{1};
     for(const auto& definition:t.definitions()) {
@@ -91,6 +156,6 @@ void images() {
 }
 }
 int main() {
-    try {stateTests();pickingAndControllerTests();oppositeSeatTest();images();std::cout<<"PASS: 120-card conservation, ordered draws/returns, visibility, tap/flip/rotate, drag cancel, split/merge/shuffle, rotated ray picking, hand/controller input and generated images\n";return EXIT_SUCCESS;}
+    try {stateTests();pickingAndControllerTests();oppositeSeatTest();emptyPileTests();importedCatalogTests();imageFileTests();images();std::cout<<"PASS: 120-card conservation, ordered draws/returns, visibility, tap/flip/rotate, drag cancel, split/merge/shuffle, rotated ray picking, hand/controller input and generated images\n";return EXIT_SUCCESS;}
     catch(const std::exception& e) {std::cerr<<"FAIL: "<<e.what()<<'\n';return EXIT_FAILURE;}
 }
