@@ -58,8 +58,8 @@ GLuint Renderer::compile(GLenum type, const char* source) {
     }
     return shader;
 }
-void Renderer::initialize(const Tabletop& table,const std::filesystem::path& cacheRoot) {
-    definitions_=table.definitions();cacheRoot_=cacheRoot;
+void Renderer::initialize(const Tabletop& table,const std::filesystem::path& cacheRoot,const std::filesystem::path& bundledRoot) {
+    definitions_=table.definitions();cacheRoot_=cacheRoot;bundledRoot_=bundledRoot;
     gl_.load();
     // Application owns this renderer and calls shutdown even after partial setup.
     const GLuint vertex = compile(GL_VERTEX_SHADER, vertexSource);
@@ -217,9 +217,9 @@ GLuint Renderer::uploadImage(const CardImage& image) {
 CardImage Renderer::sourceImage(std::optional<std::size_t> definition) const {
     if(!definition || *definition>=definitions_.size()) return makeCardImage(nullptr);
     const auto& d=definitions_[*definition];
-    if(!cacheRoot_.empty() && !d.scryfallId.empty()) {
+    for(const auto& root:{cacheRoot_,bundledRoot_}) if(!root.empty() && !d.scryfallId.empty()) {
         for(const auto* extension:{".jpg",".png"})
-            if(auto image=loadCardImage(cacheRoot_/d.setId/(d.scryfallId+extension))) return std::move(*image);
+            if(auto image=loadCardImage(root/d.setId/(d.scryfallId+extension))) return std::move(*image);
     }
     return makeCardImage(&d);
 }
@@ -299,7 +299,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
     panel({16*s,16*s,900*s,92*s},dark);
     panel(active?ui.handArea():UiRect{16*s,h-100*s,w-32*s,84*s},dark);
     std::vector<Vertex> text;
-    appendText(text,"FEMBOYLOVER.EXE / PHASE 3B",30*s,28*s,3*s);
+    appendText(text,"FEMBOYLOVER.EXE / PHASE 3B.1",30*s,28*s,3*s);
     std::string heading="20 WIDE X 10 DEEP / G: CAPACITY PREVIEW / LOCAL TABLETOP";
     if(room.capacityPreviewEnabled()) heading="200-SLOT CAPACITY PREVIEW / G: RETURN TO CARDS";
     if(networked) heading=connection->side==0?"NETWORK ROOM / PINK HOST / F2: MAIN MENU":"NETWORK ROOM / BLUE GUEST / F2: MAIN MENU";
@@ -363,7 +363,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
         const float x=std::max(12*s,(w-880*s)/2),y=std::max(12*s,(h-420*s)/2);
         panel({x,y,880*s,420*s},dark);text.clear();
         appendText(text,"FEMBOYLOVER.EXE",x+30*s,y+28*s,4*s);
-        appendText(text,"PHASE 3B / BRING YOUR OWN BOYFRIEND",x+30*s,y+78*s,2*s);
+        appendText(text,"PHASE 3B.1 / BRING YOUR OWN BOYFRIEND",x+30*s,y+78*s,2*s);
         if(connection->editingAddress) {
             appendText(text,"HOST ADDRESS / IPV4 OR HOSTNAME / UDP 33445",x+30*s,y+145*s,2*s);
             appendText(text,connection->address.substr(connection->address.size()>45?connection->address.size()-45:0),x+30*s,y+188*s,2.5F*s);

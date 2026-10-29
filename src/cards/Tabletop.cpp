@@ -168,58 +168,63 @@ bool Tabletop::beginDrag(std::span<const CardId> ids,PileId pid,Vec2 anchor) {
     if (pid) {
         const auto* p=pile(pid);
         if(!p || p->cards.empty()) return false;
-        dragPile_=*p;
+        drag_.pile=*p;
     }
     else {
         if (ids.empty()) return false;
         std::set<CardId> unique(ids.begin(),ids.end());if (unique.size()!=ids.size()) return false;
         for(auto id:ids) if (!card(id) || card(id)->zone==CardZone::Pile) return false;
-        for(auto id:ids) dragCards_.push_back(*card(id));
-        for (std::size_t i=0;i<dragCards_.size();++i) {
-            auto& c=cards_.at(dragCards_[i].id);
+        for(auto id:ids) drag_.cards.push_back(*card(id));
+        for (std::size_t i=0;i<drag_.cards.size();++i) {
+            auto& c=cards_.at(drag_.cards[i].id);
             if(c.zone==CardZone::Hand) {c.position={anchor.x+static_cast<float>(i)*0.04F,anchor.z};c.faceUp=true;c.angle=c.handOwner==1 ? pi:0;}
             c.zone=CardZone::Table;c.handOwner=-1;c.height+=0.15F;c.order=nextOrder_++;
         }
     }
-    dragAnchor_=anchor;return true;
+    drag_.anchor=anchor;return true;
 }
 void Tabletop::moveDrag(Vec2 anchor) {
     if (!dragging()) return;
-    const Vec2 delta{anchor.x-dragAnchor_.x,anchor.z-dragAnchor_.z};
-    if (dragPile_) {auto& p=piles_.at(dragPile_->id);p.position.x+=delta.x;p.position.z+=delta.z;}
-    for(const auto& original:dragCards_) {auto& c=cards_.at(original.id);c.position.x+=delta.x;c.position.z+=delta.z;}
-    dragAnchor_=anchor;
+    const Vec2 delta{anchor.x-drag_.anchor.x,anchor.z-drag_.anchor.z};
+    if (drag_.pile) {auto& p=piles_.at(drag_.pile->id);p.position.x+=delta.x;p.position.z+=delta.z;}
+    for(const auto& original:drag_.cards) {auto& c=cards_.at(original.id);c.position.x+=delta.x;c.position.z+=delta.z;}
+    drag_.anchor=anchor;
 }
-bool Tabletop::dragged(CardId id) const {return std::any_of(dragCards_.begin(),dragCards_.end(),[id](const auto& c){return c.id==id;});}
-void Tabletop::settle(CardInstance& c) {
+bool Tabletop::dragged(CardId id) const {return std::any_of(drag_.cards.begin(),drag_.cards.end(),[id](const auto& c){return c.id==id;});}
+void Tabletop::settle(CardInstance& c,std::span<const CardId> otherHeld) {
+    const auto held=[&](CardId id){return std::find(otherHeld.begin(),otherHeld.end(),id)!=otherHeld.end();};
     c.height=layout::cardCenterY;
-    for(const auto& [id,other]:cards_) if(id!=c.id && other.zone==CardZone::Table && !dragged(id) && overlapping(c.position,orientation(c),other.position,orientation(other)))
+    for(const auto& [id,other]:cards_) if(id!=c.id && other.zone==CardZone::Table && !dragged(id) && !held(id) && overlapping(c.position,orientation(c),other.position,orientation(other)))
         c.height=std::max(c.height,other.height+layout::cardThickness);
-    for(const auto& [id,p]:piles_) if(!p.cards.empty() && !draggedPile(id) && overlapping(c.position,orientation(c),p.position,orientation(p)))
+    for(const auto& [id,p]:piles_) if(!p.cards.empty() && !draggedPile(id) && !held(p.cards.front()) && overlapping(c.position,orientation(c),p.position,orientation(p)))
         c.height=std::max(c.height,1.35F+layout::cardThickness*static_cast<float>(std::max<std::size_t>(1,p.cards.size()))+layout::cardThickness/2);
 }
-void Tabletop::finishDrag(PileId target) {
+void Tabletop::finishDrag(PileId target,std::span<const CardId> otherHeld) {
     if (!dragging()) return;
     std::vector<CardId> moving;
-    if (dragPile_) {
-        if(target && target!=dragPile_->id && pile(target)) moving=piles_.at(dragPile_->id).cards;
-    } else for(const auto& c:dragCards_) moving.push_back(c.id);
-    if(!target || !pile(target) || (dragPile_ && target==dragPile_->id)) target=0;
+    if (drag_.pile) {
+        if(target && target!=drag_.pile->id && pile(target)) moving=piles_.at(drag_.pile->id).cards;
+    } else for(const auto& c:drag_.cards) moving.push_back(c.id);
+    if(!target || !pile(target) || (drag_.pile && target==drag_.pile->id)) target=0;
     if(!target) {
-        std::stable_sort(dragCards_.begin(),dragCards_.end(),[](const auto& a,const auto& b){return a.height<b.height;});
-        while(!dragCards_.empty()) {
-            const auto id=dragCards_.front().id;dragCards_.erase(dragCards_.begin());
-            settle(cards_.at(id)); // Already settled group members can support the next card.
+        std::stable_sort(drag_.cards.begin(),drag_.cards.end(),[](const auto& a,const auto& b){return a.height<b.height;});
+        while(!drag_.cards.empty()) {
+            const auto id=drag_.cards.front().id;drag_.cards.erase(drag_.cards.begin());
+            settle(cards_.at(id),otherHeld); // Already settled group members can support the next card.
         }
     }
-    dragCards_.clear();dragPile_.reset();
+    drag_.cards.clear();drag_.pile.reset();
     if(target && !moving.empty()) toPile(moving,target,false);
 }
 void Tabletop::cancelDrag() {
-    for(const auto& c:dragCards_) cards_.at(c.id)=c;
-    if(dragPile_) piles_.at(dragPile_->id)=*dragPile_;
-    dragCards_.clear();dragPile_.reset();
+    for(const auto& c:drag_.cards) cards_.at(c.id)=c;
+    if(drag_.pile) piles_.at(drag_.pile->id)=*drag_.pile;
+    drag_.cards.clear();drag_.pile.reset();
 }
+CardDrag Tabletop::suspendDrag() {
+    auto saved=std::move(drag_);drag_={};return saved;
+}
+void Tabletop::resumeDrag(CardDrag drag) {drag_=std::move(drag);}
 bool Tabletop::valid() const {
     std::set<CardId> contained;
     for(const auto& [id,p]:piles_) if(id>2 && p.cards.empty()) return false;
@@ -293,7 +298,7 @@ bool Tabletop::applyView(const TableView& view) {
         if(c==cards.end() || c->second.zone!=CardZone::Pile || c->second.pile!=id || !contained.insert(cid).second) return false;
     }
     for(const auto& [id,c]:cards) if(c.zone==CardZone::Pile && !contained.contains(id)) return false;
-    cards_=std::move(cards);piles_=std::move(piles);dragCards_.clear();dragPile_.reset();return true;
+    cards_=std::move(cards);piles_=std::move(piles);drag_.cards.clear();drag_.pile.reset();return true;
 }
 
 }

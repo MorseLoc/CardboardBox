@@ -330,3 +330,22 @@ completed card actions are reliable and deduplicated. A restarted guest can
 resume while the same host remains open. Collections/economy and final packaging
 remain later milestones. Keep Unlimited as the only card pool and the table
 20 cards wide by 10 deep. See PHASE3_NETWORK.md for exact limits and checks.
+
+
+## Amendment 12: independent grabs, bundled scans, expanded Phase 4
+
+Both players must be able to manipulate different cards or piles at the same
+time. Lock only the selected objects and a held pile's members. Cancel, expiry
+and disconnect release only that player's lease. The old global-lock limitation
+in Amendment 11 is superseded by Phase 3B.1.
+
+Support scans beside the executable under assets/cards/2ed in the final playable
+ZIP so the second PC does not need a separate first-run artwork download. Keep
+the existing per-user image cache compatible. Final packaging is still deferred.
+
+The next combined Phase 4 now includes the shop/persistent collection, owned-card
+deck builder, and saved/synchronized avatar face painter, plus the original
+manual match-setup requirements. This brings work forward from the original
+phase table; it does not remove those requirements or implement them in 3B.1.
+See PHASE4_SCOPE.md for acceptance criteria. Keep toy/furniture/room painting,
+physics throws, detailed rewards, consensual ante, and final polish later.

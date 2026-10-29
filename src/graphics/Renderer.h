@@ -13,7 +13,7 @@ public:
     Renderer() = default;
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
-    void initialize(const Tabletop& table,const std::filesystem::path& cacheRoot={});
+    void initialize(const Tabletop& table,const std::filesystem::path& cacheRoot={},const std::filesystem::path& bundledRoot={});
     void shutdown() noexcept;
     void draw(int width,int height,const glm::mat4& viewProjection,
               const Room& room,const Player& player,bool paused,const Tabletop& table,const TabletopController& controls,const Player* remote=nullptr,const ConnectionView* connection=nullptr);
@@ -34,7 +34,7 @@ private:
     GLint mvpLocation_=-1,tintLocation_=-1,useTextureLocation_=-1;
     std::vector<GLuint> textures_;
     std::vector<CardDefinition> definitions_;
-    std::filesystem::path cacheRoot_;
+    std::filesystem::path cacheRoot_,bundledRoot_;
     GLuint detailTexture_=0;
     std::optional<std::size_t> detailDefinition_;
     GLint cardFirst_=0;

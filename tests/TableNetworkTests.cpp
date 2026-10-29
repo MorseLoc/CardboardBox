@@ -56,7 +56,8 @@ void authority() {
     auto cards=session.table.hand(0);check(cards.size()==7,"Wrong draw count");
     check(apply(1,cmd(CardOp::Hand,0,{cards[0]}))==CardResult::Private,"Stole opponent hand card");
     check(apply(0,cmd(CardOp::Begin,0,{cards[0]}))==CardResult::Applied,"Begin drag failed");
-    check(apply(1,cmd(CardOp::Draw,2))==CardResult::Busy,"Concurrent action ignored lock");
+    check(apply(1,cmd(CardOp::Draw,2))==CardResult::Applied,"Unrelated library was locked");
+    check(apply(1,cmd(CardOp::Begin,0,{cards[0]}))==CardResult::Busy,"Same-card grab was not locked");
     auto move=cmd(CardOp::Move);move.point={1,1};apply(0,move);
     check(session.table.card(cards[0])->zone==CardZone::Table,"Dragging hand card did not reveal");
     check(session.release(0),"Disconnect release failed");
@@ -85,6 +86,52 @@ void authority() {
         auto hand=session.table.hand(0);
         if(!hand.empty()) {auto ret=cmd(CardOp::Return,0,{hand.back()});ret.bottom=i%2;apply(0,ret);}
         apply(0,cmd(CardOp::Shuffle,1));check(session.table.valid() && session.table.cards().size()==120,"Conservation failed");
+    }
+}
+void simultaneousGrabs() {
+    TableSession session;double now=0;
+    const auto apply=[&](int side,TableCommand c){return session.apply(side,c,true,now+=0.01);};
+    session.table.draw(1,0,4);session.table.draw(2,1,4);
+    const auto a=session.table.hand(0),b=session.table.hand(1);
+    check(apply(0,cmd(CardOp::Begin,0,{a[0]}))==CardResult::Applied,"Host grab failed");
+    check(apply(1,cmd(CardOp::Begin,0,{b[0]}))==CardResult::Applied,"Guest simultaneous grab failed");
+    auto move=cmd(CardOp::Move);move.point={-1,0.5F};apply(0,move);move.point={1,-0.5F};apply(1,move);
+    check(session.holding(0) && session.holding(1),"Leases were not independent");
+    check(session.table.card(a[0])->position.x<0 && session.table.card(b[0])->position.x>0,"Concurrent movement overwrote other card");
+    apply(0,cmd(CardOp::Finish));
+    check(!session.holding(0) && session.holding(1),"Finishing host released guest grab");
+    check(apply(0,cmd(CardOp::Tap,0,{b[0]}))==CardResult::Busy,"Held card tapped by other player");
+    check(apply(0,cmd(CardOp::Group,0,{a[0],b[0]}))==CardResult::Busy,"Held card grouped by other player");
+    check(apply(0,cmd(CardOp::Tap,0,{a[0]}))==CardResult::Applied,"Unrelated tap blocked");
+    apply(1,cmd(CardOp::Finish));
+    // Grouped drags lock every member, not just the top card.
+    apply(0,cmd(CardOp::Begin,0,{a[0],a[1]}));apply(1,cmd(CardOp::Begin,0,{b[0],b[1]}));
+    apply(0,cmd(CardOp::Cancel));check(session.holding(1) && !session.holding(0),"Cancel released both leases");
+    check(session.table.card(a[1])->zone==CardZone::Hand,"Canceled group did not restore hand");
+    apply(1,cmd(CardOp::Finish));apply(0,cmd(CardOp::Group,0,{a[0]}));apply(1,cmd(CardOp::Group,0,{b[0],b[1]}));
+    // Public pile 3 and pile 4 may be moved independently.
+    check(apply(0,cmd(CardOp::Begin,3))==CardResult::Applied,"Pile 3 grab failed");
+    check(apply(1,cmd(CardOp::Split,3))==CardResult::Busy,"Held pile split accepted");
+    check(apply(1,cmd(CardOp::Shuffle,3))==CardResult::Busy,"Held pile shuffled");
+    check(apply(1,cmd(CardOp::Draw,3))==CardResult::Busy,"Held pile draw accepted");
+    check(apply(1,cmd(CardOp::Begin,4))==CardResult::Applied,"Independent pile 4 blocked");
+    auto finish=cmd(CardOp::Finish);finish.target=3;apply(1,finish);
+    check(session.table.pile(3)->cards.size()==1 && session.table.pile(4)->cards.size()==2,"Merge mutated a held target");
+    check(!session.holding(1) && session.holding(0),"Rejected merge left stale lease");
+    session.release(0);
+    // A disconnected player must not cancel the other player's drag.
+    apply(0,cmd(CardOp::Begin,3));apply(1,cmd(CardOp::Begin,4));session.release(1);
+    check(session.holding(0) && !session.holding(1),"Disconnect canceled host grab");
+    check(session.expire(now+4) && !session.holding(0),"Independent expiry failed");
+    // A floating card cannot become permanent support for the other drop.
+    apply(0,cmd(CardOp::Begin,0,{a[2]}));apply(1,cmd(CardOp::Begin,0,{b[2]}));
+    apply(0,cmd(CardOp::Finish));check(session.table.card(a[2])->height<layout::cardCenterY+0.02F,"Drop stacked on another held card");
+    apply(1,cmd(CardOp::Cancel));
+    for(int i=0;i<150;++i) {
+        apply(0,cmd(CardOp::Begin,0,{a[2]}));apply(1,cmd(CardOp::Begin,0,{b[2]}));
+        move.point={-1.5F,0.7F};apply(0,move);move.point={1.5F,-0.7F};apply(1,move);
+        apply(0,cmd(i%2?CardOp::Cancel:CardOp::Finish));apply(1,cmd(i%2?CardOp::Finish:CardOp::Cancel));
+        check(session.table.valid() && session.table.cards().size()==120,"Concurrent drags lost cards");
     }
 }
 void networkControls() {
@@ -172,9 +219,17 @@ void loopback() {
     host.syncTable(hostView);guest.syncTable(guestView);
     check(hostView.card(played) && hostView.visibleDefinition(played,0).has_value(),"UDP play/reveal failed");
     host.command(cmd(CardOp::Tap,0,{played}));pump(host,guest,20);guest.syncTable(guestView);check(guestView.card(played)->tapped,"UDP tap failed");
+    host.syncTable(hostView);guest.syncTable(guestView);
+    const auto hostHeld=hostView.hand(0).front(),guestHeld=guestView.hand(1).front();
+    host.command(cmd(CardOp::Begin,0,{hostHeld}));guest.command(cmd(CardOp::Begin,0,{guestHeld}));pump(host,guest,20);
+    move.point={-1,0.5F};host.command(move);move.point={1,-0.5F};guest.command(move);pump(host,guest,20);
+    host.syncTable(hostView);guest.syncTable(guestView);
+    check(hostView.card(hostHeld)->position.x<0 && guestView.card(guestHeld)->position.x>0,"UDP concurrent grabs failed");
+    host.command(cmd(CardOp::Cancel));pump(host,guest,20);guest.command(cmd(CardOp::Cancel));pump(host,guest,20);guest.syncTable(guestView);
     // A held card survives a quiet stationary grab due to heartbeat renewal.
     const auto held=guestView.hand(1).front();guest.command(cmd(CardOp::Begin,0,{held}));pump(host,guest,350);
-    host.command(cmd(CardOp::Draw,1));check(host.lastCardResult()==CardResult::Busy,"Quiet grab lease expired despite keepalive");
+    host.command(cmd(CardOp::Draw,1));check(host.lastCardResult()==CardResult::Applied,"Unrelated draw was blocked");
+    host.command(cmd(CardOp::Begin,0,{held}));check(host.lastCardResult()==CardResult::Busy,"Quiet grab lease expired despite keepalive");
     guest.reconnect();pump(host,guest,200);guest.syncTable(guestView);host.syncTable(hostView);
     check(guest.ready() && guestView.hand(1).size()==6,"Reconnect did not roll back in-progress grab");
     check(guestView.cards().size()==120 && guestView.valid(),"Reconnect duplicated cards");
@@ -191,6 +246,6 @@ void loopback() {
 }
 }
 int main() {
-    try {protocol();authority();networkControls();smoothing();retries();loopback();std::cout<<"PASS: filtered wire privacy, strict decoding, host permissions, card conservation, drag locks/expiry, all table operations, 60fps interpolation, UDP shared cards, reconnect rollback, process restart resume\n";return 0;}
+    try {protocol();authority();simultaneousGrabs();networkControls();smoothing();retries();loopback();std::cout<<"PASS: filtered wire privacy, strict decoding, host permissions, card conservation, independent object locks/expiry, simultaneous UDP drags, all table operations, 60fps interpolation, UDP shared cards, reconnect rollback, process restart resume\n";return 0;}
     catch(const std::exception& e) {std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}
 }

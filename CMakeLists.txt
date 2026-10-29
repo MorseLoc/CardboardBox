@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(FemboyLover VERSION 0.3.1 LANGUAGES CXX)
+project(FemboyLover VERSION 0.3.2 LANGUAGES CXX)
 
 find_package(SDL3 3.2 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)

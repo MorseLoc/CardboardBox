@@ -1,14 +1,14 @@
-# FemboyLover.exe — Phase 3B: shared tabletop
+# FemboyLover.exe — Phase 3B.1: independent card grabs and bundled artwork
 
-This update adds **host-authoritative shared cards, private hands, synchronized
-piles, and smoother movement** to the working Phase 3A room. Unlimited artwork
+This patch retains Phase 3B shared cards, private hands, movement smoothing,
+and reconnects, and replaces the global drag lock with **per-object locks**. Unlimited artwork
 uses your existing cache. No new dependency is required.
 
 1. Close both games. Back up your project. Copy this ZIP's **contents** into
    the folder containing your working `CMakeLists.txt`, replacing matching files.
 2. In Visual Studio select **windows-debug**, let CMake reconfigure, then
    **Build > Build All** and launch **FemboyLover.exe**. Both copies need this
-   same Phase 3B build; 3A cannot connect to 3B.
+   same Phase 3B.1 build; older builds cannot connect to it.
 3. First window: **H**. Second window: **J**, **Ctrl+A**, `127.0.0.1`, Enter.
    No Tailscale is needed for this same-PC test.
 4. Walk to your assigned chair with WASD and **E** to sit. **Escape** resumes
@@ -26,9 +26,9 @@ uses your existing cache. No new dependency is required.
 8. Repeat in **windows-release**, then between the two PCs using the host's
    Tailscale IPv4 address. Each PC needs its own existing image cache for scans.
 
-The table is **20 cards wide by 10 deep**, with free placement. One active drag
-at a time is the current table-grab policy; competing actions show a busy message.
-Dragging is clamped to the felt. A lost/abandoned grab rolls back rather than
+The table is **20 cards wide by 10 deep**, with free placement. Both players can drag different cards or piles simultaneously. Only a grab of
+the same object, its pile members, or a conflicting mutation receives a busy
+message. Dragging is clamped to the felt. A lost/abandoned grab rolls back rather than
 losing a card. Local mode (**L** on the main menu) retains the Phase 2 controls.
 
 **Validation:** native shared-table and room UDP tests, card conservation,
@@ -39,7 +39,23 @@ your checks. Detailed test steps and architecture: **docs/PHASE3_NETWORK.md**.
 This remains a manual tabletop with two temporary 60-card demo libraries.
 Collections, shops, deck building, disk saves of matches, rewards, ante, and
 creative tools are later phases. There is no automatic Magic rules engine.
-The older Phase 2 instructions below still explain local controls and artwork.
+The next combined Phase 4 includes the shop, persistent owned collection, deck
+builder, and shared saved face painter, alongside manual match setup. See
+**docs/PHASE4_SCOPE.md** for the current scope. These are not implemented by this
+3B.1 patch. The older Phase 2 instructions below explain local controls/artwork.
+
+## Artwork on the second PC and in the final ZIP
+
+Card images are local assets, not network downloads. On the PC with scans,
+copy `%APPDATA%\FemboyLover\Clubhouse\cards\2ed` to the same per-user path on
+the second PC, then restart its game. Or run the included image downloader there.
+
+This patch also supports `<folder containing FemboyLover.exe>\assets\cards\2ed`
+for bundled JPEG/PNG scans. The renderer checks the existing cache first, then
+that executable-relative directory. The final playable ZIP can contain all
+completed scans in that directory: extract and play, with no first-run download
+or PowerShell requirement. This source ZIP does not include the scans. See
+**docs/ARTWORK_DISTRIBUTION.md**.
 
 ---
 

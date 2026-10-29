@@ -24,7 +24,7 @@ Application::~Application() {
 }
 void Application::initialize() {
     SDL_SetMainReady(); // We supply a normal C++ main instead of SDL's wrapper.
-    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.3.1", "private.femboylover.clubhouse"), "Set metadata");
+    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.3.2", "private.femboylover.clubhouse"), "Set metadata");
     requireSdl(SDL_Init(SDL_INIT_VIDEO), "Initialize SDL3");
     sdlStarted_ = true;
     requireSdl(SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3), "Set GL major");
@@ -32,7 +32,7 @@ void Application::initialize() {
     requireSdl(SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE), "Set core profile");
     requireSdl(SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1), "Set double buffer");
     requireSdl(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24), "Set depth buffer");
-    window_ = SDL_CreateWindow("FemboyLover.exe | PHASE 3B | Shared tabletop",
+    window_ = SDL_CreateWindow("FemboyLover.exe | PHASE 3B.1 | Shared tabletop",
                                1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!window_) throw std::runtime_error(std::string{"Create window: "} + SDL_GetError());
     requireSdl(SDL_SetWindowMinimumSize(window_, 960, 600), "Set minimum window size");
@@ -46,7 +46,11 @@ void Application::initialize() {
     if(!pref) throw std::runtime_error(std::string{"Card cache path: "}+SDL_GetError());
     const std::string_view utf8Pref{pref.get()};
     const std::filesystem::path prefPath{std::u8string(utf8Pref.begin(),utf8Pref.end())};
-    renderer_.initialize(table_,prefPath/"cards");
+    const char* base=SDL_GetBasePath();
+    if(!base) throw std::runtime_error(std::string{"Game asset path: "}+SDL_GetError());
+    const std::string_view utf8Base{base};
+    const std::filesystem::path basePath{std::u8string(utf8Base.begin(),utf8Base.end())};
+    renderer_.initialize(table_,prefPath/"cards",basePath/"assets"/"cards");
     network_.setResumeDirectory(prefPath/"sessions");
     SDL_Log("Card cache root: %s",pref.get());
     camera_.update(0.0F, player_.position(), player_.seat(), room_, true);

@@ -1,4 +1,4 @@
-# Phase 3B: shared cards and smooth pawns
+# Phase 3B.1: shared cards and smooth pawns
 
 This extends the user's working Phase 3A source, originally based on
 MorseLoc/CardboardBox commit `14784fbbe9c9e17c3e93c3d979d7748821754cc8`.
@@ -12,7 +12,7 @@ Copy all archive contents over the working project root (beside CMakeLists.txt),
 keeping your VCPKG_ROOT environment setting. No extra dependency is introduced.
 Select windows-debug, wait for configuration, Build All, and launch
 FemboyLover.exe. Repeat with windows-release. This is a source update, not a
-precompiled Windows executable. Both players must use Phase 3B: its wire version
+precompiled Windows executable. Both players must use Phase 3B.1: its wire version
 and build number intentionally reject 3A peers.
 
 Two windows on one PC: H in the first; J, Ctrl+A, `127.0.0.1`, Enter in the
@@ -51,9 +51,10 @@ Q exits from the menu or pause screen. L on the menu starts local tabletop mode.
 7. H moves selected loose cards into your hand; L returns them to your library
    top, Shift+L to its bottom. Double-click your library to draw one. A hidden
    opponent pile cannot be drawn/revealed/shuffled/manipulated by your client.
-8. Have one player hold a card. A second player's conflicting operation must
-   receive TABLE BUSY. Release before the second player retries. This build
-   serializes all grabs: independent simultaneous drags are not implemented.
+8. Have both players hold and move different cards or piles at once. Both must
+   move independently. Try grabbing/tapping/flipping/grouping/shuffling/drawing
+   the same held object: only that conflicting request must receive OBJECT BUSY.
+   Drawing your own unlocked library while the other player drags must work.
 9. Cancel a drag with Escape/right-click, change focus, or disconnect the guest
    while dragging. The card must return to its original hand/position without
    duplication. A stationary held grab stays alive via heartbeat packets.
@@ -64,16 +65,19 @@ Q exits from the menu or pause screen. L on the menu starts local tabletop mode.
 12. Repeat on the two real Windows PCs, including Tailscale disconnection/recovery.
 
 Both PCs load scans from their own `%APPDATA%\FemboyLover\Clubhouse\cards`
-cache. No artwork crosses the game connection. Your completed download does not
+cache or executable-relative `assets/cards`. No artwork crosses the game connection. Your completed download does not
 need to be repeated on this PC. Missing artwork keeps the readable fallback.
 
 ## Files and responsibilities
 
 - `TableCommand.h`: explicit card requests without definitions or client state.
-- `TableSession`: the host's authoritative Tabletop, permission checks, one
-  manipulation lease, bounds checks, cancellation, and lease expiry.
+- `TableSession`: the host's authoritative Tabletop, permission checks, independent per-player
+  leases that lock only their selected objects, bounds checks, cancellation, and lease expiry.
 - `TableProtocol`: bounded, explicit little-endian command/view serialization;
   finite-float checks and rejection of truncated or trailing payloads.
+- `CardDrag` / `suspendDrag` / `resumeDrag`: independent server-held rollback
+  contexts allow the existing tabletop operations to run on one lease without
+  clobbering another. Held cards cannot become support for another card's drop.
 - `Tabletop::viewFor`: recipient filtering. Hidden libraries/piles contain
   anonymous placeholders, not original instance IDs or their shuffled order.
   The other player's hand also has only anonymous cards. Definitions are sent
@@ -100,7 +104,7 @@ library anchors remain available internally for returns.
 Drag movement is sent at most 20 times a second; stationary holds renew twice a
 second. A lease expires after three seconds without a renewal. Standing or
 losing the guest connection cancels its active drag. A grab cancel rolls back
-the original physical state; atomic completed actions are never rolled back
+only its own original physical state; atomic completed actions are never rolled back
 merely because their sender disconnects. Updated recipient views are sent only
 when the table changes, at up to 20 Hz, plus the initial/reconnect snapshot.
 The packet size cap is 32 KiB; snapshots stay below that cap. Commands have a
@@ -140,13 +144,17 @@ Headless tests do not certify those platform behaviors.
 
 ## Boundaries and next phase
 
-One active tabletop drag is supported at a time. Other actions receive a busy
-reply instead of being queued invisibly. Cards follow authoritative snapshots;
+Each player may hold one card selection or pile; both may do so simultaneously.
+Only conflicting mutations are blocked. A pile lease locks all its member cards.
+Releasing over a held/private/stale merge target drops freely without merging,
+leaving that target untouched. Disconnect/expiry cancels only that player's lease.
+Cards follow authoritative snapshots;
 there is no client-side card prediction yet. UI pile selection may need a new
 click after another player splits/merges/removes that pile. This is a manual
 sandbox: card abilities, mana and outcomes are not interpreted automatically.
 
 No shop, collection ownership, economy, deck builder, persistent match save,
 rewards, ante, toy physics, face painter, or room painting has been added. The
-next milestone is the shop/collection foundation using the Unlimited catalog,
-including one-cent basic-land purchases and the recorded booster recipe.
+next combined Phase 4 brings together persistent collections, shop/lands/packs,
+owned-card deck building, manual match setup, and saved/synchronized face painting.
+See PHASE4_SCOPE.md.

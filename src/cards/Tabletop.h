@@ -44,6 +44,12 @@ struct CardPile {
 };
 inline constexpr std::size_t hiddenDefinition=std::numeric_limits<std::size_t>::max();
 struct TableView {std::vector<CardInstance> cards;std::vector<CardPile> piles;};
+struct CardDrag {
+    std::vector<CardInstance> cards;
+    std::optional<CardPile> pile;
+    Vec2 anchor{};
+    bool active() const {return !cards.empty() || pile.has_value();}
+};
 struct TableHit { CardId card=0; PileId pile=0; Vec2 point{}; };
 class Tabletop {
 public:
@@ -68,24 +74,25 @@ public:
     void rotate(std::span<const CardId> ids,PileId pile,float radians);
     bool beginDrag(std::span<const CardId> ids,PileId pile,Vec2 anchor);
     void moveDrag(Vec2 anchor);
-    void finishDrag(PileId mergeTarget=0);
+    void finishDrag(PileId mergeTarget=0,std::span<const CardId> otherHeld={});
     void cancelDrag();
-    bool dragging() const { return !dragCards_.empty() || dragPile_.has_value(); }
+    bool dragging() const { return drag_.active(); }
+    Vec2 dragAnchor() const {return drag_.anchor;}
+    CardDrag suspendDrag(); // Move a lease context out while keeping visible positions.
+    void resumeDrag(CardDrag drag);
     bool dragged(CardId id) const;
-    bool draggedPile(PileId id) const { return dragPile_ && dragPile_->id==id; }
+    bool draggedPile(PileId id) const { return drag_.pile && drag_.pile->id==id; }
     bool valid() const;
     TableView viewFor(int viewer) const;
     bool applyView(const TableView& view); // Filtered display state, never client authority.
 private:
     void detach(CardId id);
     void removeEmptyPiles();
-    void settle(CardInstance& card);
+    void settle(CardInstance& card,std::span<const CardId> otherHeld={});
     std::vector<CardDefinition> definitions_;
     std::map<CardId,CardInstance> cards_;
     std::map<PileId,CardPile> piles_;
-    std::vector<CardInstance> dragCards_;
-    std::optional<CardPile> dragPile_;
-    Vec2 dragAnchor_{};
+    CardDrag drag_;
     std::mt19937 rng_;
     CardId nextCard_=1;
     PileId nextPile_=1;
