@@ -44,6 +44,7 @@ private:
     std::vector<GLuint> textures_;
     std::vector<CardDefinition> definitions_;
     std::filesystem::path cacheRoot_,bundledRoot_;
+    GLuint titleTexture_=0;
     GLuint detailTexture_=0;
     std::optional<std::size_t> detailDefinition_;
     GLint cardFirst_=0;

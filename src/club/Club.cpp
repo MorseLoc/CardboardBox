@@ -48,11 +48,11 @@ ClubStore::ClubStore(const std::filesystem::path& file,const std::vector<CardDef
 }
 ClubStore::~ClubStore(){if(impl_->db) sqlite3_close(impl_->db);}
 void ClubStore::ensure(const std::string& id,int side) {
+    (void)side;
     auto& p=*impl_;Query exists(p.db,"SELECT id FROM players WHERE id=?");exists.text(1,id);if(exists.row())return;
     exec(p.db,"BEGIN IMMEDIATE");try {
-        Query add(p.db,"INSERT INTO players VALUES(?,50000,'Starter',?)");add.text(1,id);add.blob(2,defaultFace());add.row();
-        const auto cards=unlimitedDemoDeck(p.defs,side);std::string list;for(auto d:cards){p.copy(id,static_cast<std::uint16_t>(d));list+=p.defs[d].id+"\n";}
-        Query deck(p.db,"INSERT INTO decks VALUES(?,'Starter',?)");deck.text(1,id);deck.text(2,list);deck.row();exec(p.db,"COMMIT");
+        Query add(p.db,"INSERT INTO players VALUES(?,50000,'',?)");add.text(1,id);add.blob(2,defaultFace());add.row();
+        exec(p.db,"COMMIT");
     }catch(...){exec(p.db,"ROLLBACK");throw;}
 }
 ClubProfile ClubStore::profile(const std::string& id) {
@@ -70,7 +70,7 @@ std::string ClubStore::apply(const std::string& id,const ClubCommand& c,std::vec
         if(old.row()){std::istringstream in(old.text(1));std::string d;while(in>>d){const auto at=p.index.find(d);if(at==p.index.end())throw std::runtime_error("Receipt uses unknown card data");opened.push_back(at->second);}const auto result=old.text(0);exec(p.db,"COMMIT");return result;}
         auto current=profile(id);std::string result="SAVED";bool valid=true;
         if(c.op==ClubOp::Pack || c.op==ClubOp::Land) {
-            const std::int64_t price=c.op==ClubOp::Pack?10000:1;
+            const std::int64_t price=c.op==ClubOp::Pack?10000:100;
             if(current.cents<price){valid=false;result="NOT ENOUGH COINS";}
             if(c.op==ClubOp::Land && (c.value<0 || static_cast<std::size_t>(c.value)>=p.defs.size() || !p.defs[static_cast<std::size_t>(c.value)].basicLand)){valid=false;result="CHOOSE A BASIC LAND";}
             if(valid) {
@@ -81,7 +81,7 @@ std::string ClubStore::apply(const std::string& id,const ClubCommand& c,std::vec
                     std::uniform_int_distribution<std::size_t> pick(0,pool.size()-1);for(int j=0;j<count;++j)opened.push_back(pool[pick(p.rng)]);
                 }
                 for(auto d:opened)p.copy(id,d);
-                Query balance(p.db,"UPDATE players SET cents=cents-? WHERE id=?");balance.number(1,price);balance.text(2,id);balance.row();result=c.op==ClubOp::Pack?"OPENED 11 COMMON / 3 UNCOMMON / 1 RARE":"BOUGHT BASIC LAND FOR 0.01 COINS";
+                Query balance(p.db,"UPDATE players SET cents=cents-? WHERE id=?");balance.number(1,price);balance.text(2,id);balance.row();result=c.op==ClubOp::Pack?"OPENED 11 COMMON / 3 UNCOMMON / 1 RARE":"BOUGHT BASIC LAND FOR 1.00 COINS";
             }
         } else if(c.op==ClubOp::SaveDeck) {
             if(!validName(c.name)||c.cards.empty()||c.cards.size()>120){valid=false;result="NAME AND 1 TO 120 CARDS REQUIRED";}

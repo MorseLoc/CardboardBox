@@ -42,7 +42,7 @@ Tabletop::Tabletop(std::uint32_t seed):rng_(seed) {
 }
 void Tabletop::resetDecks(const std::array<std::vector<std::size_t>,2>& decks) {
     for(const auto& deck:decks) {
-        if(deck.empty()||deck.size()>120)throw std::runtime_error("Deck must have 1 to 120 cards");
+        if(deck.size()>120)throw std::runtime_error("Deck cannot exceed 120 cards");
         for(auto d:deck)if(d>=definitions_.size())throw std::runtime_error("Unknown deck card");
     }
     cards_.clear();piles_.clear();drag_={};nextCard_=1;nextPile_=1;nextOrder_=1;++generation_;
@@ -275,7 +275,7 @@ TableView Tabletop::viewFor(int viewer) const {
     return out;
 }
 bool Tabletop::applyView(const TableView& view) {
-    if(view.cards.empty() || view.cards.size()>240 || view.piles.size()>242) return false;
+    if(view.cards.size()>240 || view.piles.size()>242) return false;
     std::map<CardId,CardInstance> cards;
     std::map<PileId,CardPile> piles;
     for(const auto& c:view.cards) {

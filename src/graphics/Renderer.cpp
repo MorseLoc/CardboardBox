@@ -159,6 +159,7 @@ void Renderer::initialize(const Tabletop& table,const std::filesystem::path& cac
     // Small textures load only when a front/back is actually visible. Keep
     // one separate full-resolution inspection texture instead of 302 large ones.
     textures_.resize(definitions_.size()+1,0);
+    if(!bundledRoot_.empty())if(auto art=loadCardImage(bundledRoot_.parent_path()/"title.png"))titleTexture_=uploadImage(*art);
     gl_.ActiveTexture(GL_TEXTURE0);
     gl_.UseProgram(program_);
     gl_.Uniform1i(gl_.GetUniformLocation(program_,"imageTexture"),0);
@@ -167,6 +168,7 @@ void Renderer::initialize(const Tabletop& table,const std::filesystem::path& cac
 }
 void Renderer::shutdown() noexcept {
     for(auto& texture:faceTextures_)if(texture){glDeleteTextures(1,&texture);texture=0;}
+    if(titleTexture_){glDeleteTextures(1,&titleTexture_);titleTexture_=0;}
     if(detailTexture_) {glDeleteTextures(1,&detailTexture_);detailTexture_=0;}
     detailDefinition_.reset();
     if(!textures_.empty()) {glDeleteTextures(static_cast<GLsizei>(textures_.size()),textures_.data());textures_.clear();}
@@ -299,11 +301,16 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
         gl_.BufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(v.size()*sizeof(Vertex)),v.data(),GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(v.size()));gl_.Uniform1i(useTextureLocation_,0);
     };
+    if(connection&&connection->title){
+        if(titleTexture_)picture({0,0,w,h},titleTexture_);else {panel({0,0,w,h},{0.30F,0.10F,0.25F});std::vector<Vertex> v;appendText(v,"FEMBOYLOVER.EXE / TAP THAT",w*0.1F,h*0.35F,4*s);batch(v,{1,0.7F,0.8F});}
+        panel({w/2-250*s,h*0.82F,500*s,62*s},{0.12F,0.05F,0.16F});std::vector<Vertex> v;appendText(v,"ENTER / CLICK TO TAP THAT",w/2-208*s,h*0.82F+22*s,2.7F*s);batch(v,{1,0.8F,0.9F});gl_.BindVertexArray(0);glEnable(GL_DEPTH_TEST);return;
+    }
+    const bool hidden=connection&&connection->hideHud;
     const bool networked=connection && connection->networked;
     const bool active=player.seated() && !room.capacityPreviewEnabled() && !(connection && connection->menu);
     const glm::vec3 dark{0.12F,0.09F,0.15F},white{0.94F,0.85F,0.80F},pink{1,0.68F,0.78F};
-    panel({16*s,16*s,900*s,92*s},dark);
-    panel(active?ui.handArea():UiRect{16*s,h-100*s,w-32*s,84*s},dark);
+    if(!hidden)panel({16*s,16*s,900*s,92*s},dark);
+    if(active||!hidden)panel(active?ui.handArea():UiRect{16*s,h-100*s,w-32*s,84*s},dark);
     std::vector<Vertex> text;
     appendText(text,"FEMBOYLOVER.EXE / PHASE 4",30*s,28*s,3*s);
     std::string heading="20 WIDE X 10 DEEP / G: CAPACITY PREVIEW / LOCAL TABLETOP";
@@ -346,6 +353,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
             if(!label.empty()) appendText(text,label,30*s,h-138*s,2*s);
         }
     }
+    if(hidden)text.clear();
     batch(text,white);
     if(active && controls.menuOpen()) {
         const auto r=controls.menuRect();panel(r,{0.20F,0.14F,0.24F});text.clear();
@@ -403,7 +411,7 @@ void Renderer::drawClub(int width,int height) {
     text("CLUBHOUSE / "+money+" COINS / SELECTED: "+view.profile.selected,32,27,2.4F);
     for(const auto& b:ui.buttons(view)){rect(b.rect,{0.26F,0.17F,0.30F});text(b.label,b.rect.x+10,b.rect.y+13,1.7F);}
     text(view.status.substr(0,96),32,652,1.8F);if(!ui.notice.empty())text(ui.notice.substr(0,96),32,679,1.8F);
-    if(ui.page==ClubPage::Shop){text("ONE CENT PER BASIC LAND",36,520,1.7F);text("LATEST PACK / PURCHASE",350,130);for(std::size_t i=0;i<view.opened.size();++i){const auto d=view.opened[i];if(d<definitions_.size())text(definitions_[d].name.substr(0,35)+" / "+definitions_[d].rarity,350,170+static_cast<float>(i)*28,1.6F);}const int preview=ui.selected>=0?ui.selected:(view.opened.empty()?-1:view.opened.front());if(preview>=0&&preview<static_cast<int>(definitions_.size()))picture({950,170,245,345},cardTexture(static_cast<std::size_t>(preview),true));}
+    if(ui.page==ClubPage::Shop){text("ONE DOLLAR PER BASIC LAND",36,520,1.7F);text("LATEST PACK / PURCHASE",350,130);for(std::size_t i=0;i<view.opened.size();++i){const auto d=view.opened[i];if(d<definitions_.size())text(definitions_[d].name.substr(0,35)+" / "+definitions_[d].rarity,350,170+static_cast<float>(i)*28,1.6F);}const int preview=ui.selected>=0?ui.selected:(view.opened.empty()?-1:view.opened.front());if(preview>=0&&preview<static_cast<int>(definitions_.size()))picture({950,170,245,345},cardTexture(static_cast<std::size_t>(preview),true));}
     if(ui.page==ClubPage::Decks){rect({36,118,530,36},{0.19F,0.15F,0.24F});text("SEARCH: "+ui.query.substr(0,38),45,130,1.7F);rect({620,165,610,38},ui.naming?glm::vec3{0.36F,0.21F,0.34F}:glm::vec3{0.20F,0.16F,0.25F});text("NAME: "+ui.name,630,178,1.7F);const auto list=ui.filtered(view,definitions_);const int start=std::clamp(ui.offset,0,std::max(0,static_cast<int>(list.size())-12));for(int i=0;i<12&&start+i<static_cast<int>(list.size());++i){const int d=list[start+i];if(d==ui.selected)rect({36,165+34.0F*i,530,32},{0.32F,0.21F,0.34F});const auto count=std::count(ui.draft.begin(),ui.draft.end(),d);text(std::to_string(view.profile.owned[d])+" OWN / "+std::to_string(count)+" DECK / "+definitions_[d].name.substr(0,27),44,176+34.0F*i,1.6F);}text("DRAFT: "+std::to_string(ui.draft.size())+" / 120",620,550,1.6F);text("CLICK NAME TO EDIT",620,578,1.5F);text("TYPE TO SEARCH / CTRL+A TO CLEAR FIELD",36,632,1.5F);if(ui.selected>=0&&ui.selected<static_cast<int>(definitions_.size()))picture({935,220,245,345},cardTexture(static_cast<std::size_t>(ui.selected),true));}
     if(ui.page==ClubPage::Face){picture({36,160,400,400},faceTextures_[clubSide_]);for(int i=0;i<16;++i){const auto& c=paintColors[i];rect({500+static_cast<float>(i%8)*35,170+static_cast<float>(i/8)*45,30,35},{c[0]/255.0F,c[1]/255.0F,c[2]/255.0F});}text("BRUSH: "+std::to_string(ui.brush)+(ui.eraser?" / ERASER":(ui.bucket?" / FILL":" / PENCIL")),500,265,1.8F);text("LIVE ORB PREVIEW",850,145);text("ESC CANCELS UNSAVED EDITS",36,590,1.7F);
         const int x=static_cast<int>(left+830*s),y=height-static_cast<int>(top+560*s),w=static_cast<int>(370*s);glViewport(x,y,w,w);glEnable(GL_DEPTH_TEST);glClear(GL_DEPTH_BUFFER_BIT);gl_.BindVertexArray(vao_);Player preview;preview.applyNetworkState({0,0},0,-1);const auto vp=glm::perspective(0.53F,1.0F,0.1F,10.0F)*glm::lookAt(glm::vec3{0,1.03F,1.55F},glm::vec3{0,1.03F,0},glm::vec3{0,1,0});drawPawn(vp,preview,clubSide_==1);glViewport(0,0,width,height);glDisable(GL_DEPTH_TEST);gl_.BindVertexArray(uiVao_);gl_.BindBuffer(GL_ARRAY_BUFFER,uiVbo_);

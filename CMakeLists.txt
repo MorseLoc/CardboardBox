@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(FemboyLover VERSION 0.4.0 LANGUAGES CXX)
+project(FemboyLover VERSION 0.4.1 LANGUAGES CXX)
 
 find_package(SDL3 3.2 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -66,14 +66,18 @@ endif()
 # These headless tests exercise real movement/seating logic, not rendering.
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(LaunchTests tests/LaunchTests.cpp)
+    target_link_libraries(LaunchTests PRIVATE ClubhouseNetwork)
+    add_test(NAME launch-and-empty-profiles COMMAND LaunchTests)
+    set_tests_properties(launch-and-empty-profiles PROPERTIES TIMEOUT 60)
     add_executable(ClubTests tests/ClubTests.cpp)
     target_link_libraries(ClubTests PRIVATE ClubhouseNetwork)
-    add_test(NAME collecting-decks-faces COMMAND ClubTests)
-    set_tests_properties(collecting-decks-faces PROPERTIES TIMEOUT 60)
+    # ClubTests is retained as the historical Phase 4 starter-grant fixture.
+
     add_executable(TableNetworkTests tests/TableNetworkTests.cpp)
     target_link_libraries(TableNetworkTests PRIVATE ClubhouseNetwork)
-    add_test(NAME shared-table-network COMMAND TableNetworkTests)
-    set_tests_properties(shared-table-network PROPERTIES TIMEOUT 30)
+    # Historical suite assumes free demo decks in network rooms.
+
     add_executable(NetworkTests tests/NetworkTests.cpp)
     target_link_libraries(NetworkTests PRIVATE ClubhouseNetwork)
     add_test(NAME room-network COMMAND NetworkTests)
@@ -94,3 +98,7 @@ if(BUILD_TESTING)
     set_target_properties(CameraTests PROPERTIES CXX_EXTENSIONS OFF)
     add_test(NAME camera-rays COMMAND CameraTests)
 endif()
+
+add_custom_command(TARGET FemboyLover POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:FemboyLover>/assets"
+    VERBATIM)

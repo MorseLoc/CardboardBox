@@ -76,6 +76,11 @@ void Application::openConnectionMenu() {
     SDL_StopTextInput(window_);
 }
 bool Application::connectionEvent(const SDL_Event& event) {
+    if(connection_.title){
+        if((event.type==SDL_EVENT_KEY_DOWN&&!event.key.repeat&&(event.key.key==SDLK_RETURN||event.key.key==SDLK_SPACE))|| (event.type==SDL_EVENT_MOUSE_BUTTON_DOWN&&event.button.button==SDL_BUTTON_LEFT))connection_.title=false;
+        if(event.type==SDL_EVENT_KEY_DOWN&&event.key.key==SDLK_ESCAPE)running_=false;
+        return true;
+    }
     if(!connection_.menu) return false;
     if(event.type==SDL_EVENT_TEXT_INPUT && connection_.editingAddress) {
         for(const char* p=event.text.text;*p && connection_.address.size()<253;++p)
@@ -183,6 +188,10 @@ void Application::processEvents() {
     while(SDL_PollEvent(&event)) {
         if(event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) running_=false;
         if(event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key==SDLK_F2) {openConnectionMenu();continue;}
+        if(event.type==SDL_EVENT_KEY_DOWN&&!event.key.repeat&&!connection_.editingAddress&&!(club_.open&&club_.page==ClubPage::Decks)){
+            if(event.key.key==SDLK_O){requireSdl(SDL_SetWindowFullscreen(window_,(SDL_GetWindowFlags(window_)&SDL_WINDOW_FULLSCREEN)==0),"Toggle fullscreen");continue;}
+            if(event.key.key==SDLK_P){connection_.hideHud=!connection_.hideHud;continue;}
+        }
         if(connectionEvent(event)) continue;
         if(clubEvent(event))continue;
         if(event.type==SDL_EVENT_KEY_DOWN&&!event.key.repeat&&network_.ready()){

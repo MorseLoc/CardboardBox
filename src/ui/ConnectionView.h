@@ -3,6 +3,7 @@
 namespace fl {
 // Rendering data only; no sockets or authoritative state live in the UI.
 struct ConnectionView {
+    bool title=true,hideHud=false;
     bool menu=true,editingAddress=false,networked=false;
     std::string tableStatus="SHARED TABLE / HOST AUTHORITY";
     int side=0;

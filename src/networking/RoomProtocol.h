@@ -10,7 +10,7 @@
 namespace fl::net {
 // Pawn snapshots are unreliable; table commands and filtered views are reliable.
 inline constexpr std::uint16_t protocolVersion=3;
-inline constexpr std::uint32_t buildVersion=0x00040000;
+inline constexpr std::uint32_t buildVersion=0x00040100;
 inline constexpr std::uint16_t defaultPort=33445;
 inline constexpr std::size_t maxPacketBytes=196608;
 using Token=std::array<std::uint32_t,4>;

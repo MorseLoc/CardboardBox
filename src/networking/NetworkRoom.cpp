@@ -43,6 +43,7 @@ bool NetworkRoom::host(std::uint16_t port) {
     if(!transport_) {status_="HOST FAILED: UDP PORT MAY ALREADY BE IN USE";return false;}
     transport_->maximumPacketSize=maxPacketBytes;transport_->maximumWaitingData=2097152;
     try {clubStore_=std::make_unique<ClubStore>(clubFile_,tableSession_.table.definitions());clubStore_->ensure(identity_,0);match_={};matchRequests_.clear();publishClub(0);} catch(const std::exception& e) {stop();status_=std::string{"SAVE ERROR: "}+e.what();return false;}
+    tableSession_.table.resetDecks({});
     mode_=Mode::Host;state_.pawns[0].connected=true;refresh();
     tableDirty_=true;publishTable();publishFace(0);
     status_="HOSTING UDP "+std::to_string(port)+" - WAITING FOR GUEST";return true;

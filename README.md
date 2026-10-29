@@ -1,3 +1,32 @@
+# Phase 4.1 update
+
+- Anime title splash: Enter, Space or click continues to the existing Host/Join menu.
+- P toggles room/table information bars while preserving hand cards and menus.
+- O toggles desktop fullscreen/windowed. P/O are not intercepted while typing
+  a deck name/search or host address, so those letters remain usable in text.
+- New profiles start with zero cards/decks and 500 coins. Network rooms start
+  with empty libraries; buy cards, save/select a deck, then both Ready.
+- Basic lands cost 1.00 fictional coin (100 internal cents), not 0.01.
+- Existing saves are preserved, including any previously granted Starter cards.
+  To run an entirely fresh test, close all games and rename the host's
+  clubhouse.sqlite3 to clubhouse-before-test.sqlite3 in the SDL preference folder.
+  This preserves the old save; the next host launch creates new empty profiles.
+
+Copy ZIP contents over the working project root, let CMake reconfigure, then
+Build All on both PCs. The new assets/title.png is automatically copied beside
+the executable under assets. Both players need this same build.
+
+Native LaunchTests passed for zero-card profiles/room, $1 lands, purchase/replay,
+existing saves, empty network snapshots and purchased-deck setup. Application and
+renderer syntax checks passed; the real OpenGL title and four panels rendered
+without errors, with the title visually inspected. Windows fullscreen and native
+keyboard/input behavior still require testing on your PCs.
+
+The earlier instructions below remain useful; this update supersedes starter
+card grants and one-cent land prices mentioned in older notes.
+
+---
+
 # FemboyLover.exe — Phase 4: collect, build, paint, play
 
 Phase 4 adds **the shop, persistent player collections, owned-card deck building,
@@ -24,8 +53,7 @@ Windows. This is source code, not the final ready-to-play gift package.
 
 ## First session
 
-- **F3: shop.** New players receive 500 fictional coins and an owned 60-card
-  Starter deck. Buy a pack for 100 coins or a basic land for 0.01 coins.
+- **F3: shop.** New players receive 500 fictional coins and zero cards/decks. Buy a pack for 100 coins or a basic land for 1.00 coin.
   Pack contents appear in a list; click an entry to see its image.
 - **F4: deck builder.** Select owned cards, add/remove quantities, type to search,
   and filter by color/rarity. Click the name field and Ctrl+A to rename. Click

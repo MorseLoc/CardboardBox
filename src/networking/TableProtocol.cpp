@@ -52,7 +52,7 @@ std::vector<std::uint8_t> encodeView(const TableView& view) {
     return w.b;
 }
 std::optional<TableView> decodeView(std::span<const std::uint8_t> bytes) {
-    Reader r{bytes};TableView view;view.generation=r.id();const auto count=r.n(1);if(count<1||count>240) return {};
+    Reader r{bytes};TableView view;view.generation=r.id();const auto count=r.n(1);if(count>240) return {};
     for(unsigned i=0;i<count && r.ok;++i) {
         CardInstance c{};c.id=r.id();const auto definition=r.n(2);c.definition=definition==0xffffU?hiddenDefinition:static_cast<std::size_t>(definition);
         c.owner=static_cast<int>(r.n(1));c.zone=static_cast<CardZone>(r.n(1));c.handOwner=static_cast<int>(r.n(1))-1;c.pile=r.id();
