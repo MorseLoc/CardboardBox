@@ -32,5 +32,7 @@ struct GlApi {
     PFNGLGETUNIFORMLOCATIONPROC GetUniformLocation{};
     PFNGLUNIFORMMATRIX4FVPROC UniformMatrix4fv{};
     PFNGLUNIFORM3FVPROC Uniform3fv{};
+    PFNGLUNIFORM1IPROC Uniform1i{};
+    PFNGLACTIVETEXTUREPROC ActiveTexture{};
 };
 }

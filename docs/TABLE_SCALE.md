@@ -1,5 +1,9 @@
 # Phase 1.1 — tabletop capacity correction
 
+**Historical note:** Phase 2 supersedes this 20-by-20 request with 20 wide by
+10 deep, as requested by the user. Current dimensions are in `TableLayout.h`
+and `PHASE2_NOTES.md`. The calculations below describe the earlier revision.
+
 The user confirmed Phase 1 runs and requested a much larger table / smaller
 cards before Phase 2. The table must hold a 20 x 20 arrangement of cards.
 This patch changes scale and the supporting layout; it does not implement

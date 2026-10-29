@@ -1,218 +1,220 @@
-# FemboyLover.exe — Phase 1.1: room for 20 x 20 cards
+# FemboyLover.exe — Phase 2: physical tabletop
 
-Complete C++20 source for the next native Windows milestone. Walk around a
-small 3D clubhouse as a pawn, collide with furniture, and sit at either chair
-for a tabletop camera. Includes a HUD and pause screen. No networking or actual
-card manipulation exists yet.
+A local C++20 / SDL3 / OpenGL card-table prototype on top of the working
+clubhouse. The table now fits **20 cards wide by 10 cards deep**, with both
+chairs facing each other across the long edges. It remains a free tabletop;
+this capacity guide does not enforce placement or limit the number of cards.
 
-## Upgrade your working Phase 1 project
+## Upgrade your working project
 
-You have already built and run Phase 1. This update fixes table/card scale
-before Phase 2 begins. The felt fits **20 columns x 20 rows of upright cards
-with gaps**. Press **G** to toggle a 400-shape capacity preview. The room,
-chairs, spawn and tabletop camera are resized to match. Keep your working
-Visual Studio/vcpkg setup; there are **no new third-party dependencies**.
-
-1. Close the running game. Make a backup copy of your working project folder.
-2. Open the downloaded ZIP. This archive has `CMakeLists.txt`, `src`, `docs`,
-   and the other project files directly at its root, with **no outer wrapper
-   folder**.
-3. Copy all ZIP contents into your existing project root, allowing replacement
-   of matching source/configuration/document files. From your screenshots,
-   that root is:
+1. Close the game and keep a backup of your working project folder.
+2. Copy **all contents** of this ZIP into your existing project root, replacing
+   matching files. The archive has no wrapper folder. From your screenshots:
 
    ```text
    C:\Users\flew\source\repos\FemboyLover\FemboyLover
    ```
 
-   This is the folder containing `vcpkg.json`, `src`, and `CMakeLists.txt`.
-   Do not paste them into `src`, `out`, or the outer repository folder.
-   Existing `out`, `.vs`, and `vcpkg_installed` directories are not included in
-   the archive and do not need to be deleted. Extra Visual Studio template
-   files such as `FemboyLover.cpp/.h` are not used by our CMake target; leave
-   them alone for this upgrade.
-4. In Visual Studio, keep/open that exact folder using **File > Open > Folder**.
-5. Select **windows-debug** (it may display as **Windows x64 Debug**). Allow
-   CMake to reconfigure after the changed `CMakeLists.txt`. If it does not
-   automatically do so, right-click `CMakeLists.txt` and choose Configure or
-   Generate Cache, depending on your Visual Studio version.
-6. Choose **Build > Build All**. Select **FemboyLover.exe** as the startup item
-   (not RoomTests.exe), then press **F5**.
-7. Repeat with **windows-release**. Test both before advancing to Phase 2.
+   `CMakeLists.txt`, `vcpkg.json`, `src`, and this README belong together. Copy
+   the new `src/cards` and test files too. Keep your existing build/cache folders.
+3. Open that exact folder in Visual Studio. Select **windows-debug**, allow
+   CMake to configure, then **Build > Build All**.
+4. Select **FemboyLover.exe** as the startup item and press **F5**. Do not select
+   RoomTests, CardTests, or CameraTests for playing the game.
+5. Repeat with **windows-release** once Debug works.
 
-The archive contains complete revised files; you do not need to paste code
-snippets into individual files.
+**No new third-party dependencies.** Keep your existing vcpkg installation,
+`VCPKG_ROOT`, SDL3/GLM baseline, and presets. This is complete source, not a
+precompiled Windows executable. Output remains under `out/build/windows-debug`
+or `out/build/windows-release`, with SDL3.dll copied beside the game.
 
-## Expected scene and controls
+## First tabletop session
 
-You spawn behind the near chair, looking toward a green felt card table. A
-small pink/purple pawn has a spherical head and a fixed face. Around the room
-are wooden walls/furniture, a night-window decoration, lamps, a back-left card
-shop and five land boxes, a back-right deck desk, a left-side toy chest, and a
-right-side vanity. Their shop/editor functions are future work. The two cards
-on the table are still decorative shapes. They are now 0.28 x 0.40 world units
-on felt measuring 7.2 x 10.0 units. G swaps them for exactly 20 rows and 20
-columns of the same-sized shapes; press G again to hide that preview.
+1. Walk toward the near chair and press **E** when prompted.
+2. There are two card-back piles on the table, initially labeled **60**. They
+   are original test decks: 24 basic lands and 36 other cards per deck.
+3. Press **Shift+D** to draw seven from your own library. Your hand appears
+   along the bottom. Or double-click your near-side library to draw one.
+4. Drag a hand thumbnail onto the felt. It becomes a public face-up card.
+5. Click it, press T to tap, F to flip, or R / Shift+R to rotate. Right-click a
+   face-up card for an enlarged readable inspection; click or Escape closes it.
+6. Draw and place another card. Ctrl-click cards to multi-select, drag them as
+   a group, or press B to collect selected tabletop cards into an ordered pile.
+7. Right-click a pile for its context menu. Try shuffle, split, draw, and public
+   pile inspection. Shift-drag a pile onto another pile to merge them.
+8. Press E to stand, walk around the table, and sit at the other chair to test
+   the opposite side. Each side retains its own hand and library during this run.
 
-| Input | Room exploration | Seated table view |
-| --- | --- | --- |
-| WASD | Walk relative to camera | No movement |
-| Shift + WASD | Run | No movement |
-| Right mouse drag | Orbit camera | Pan across table |
-| Arrow keys | Orbit camera | Unused |
-| Mouse wheel | Zoom | Zoom |
-| Home | Reset camera | Reset table view |
-| G | Toggle 400-slot size preview | Toggle 400-slot size preview |
-| E | Sit when near a free chair | Stand |
-| Escape | Pause / resume | Stand; resume first if paused |
-| Q while paused | Quit | Quit |
-| Window close | Quit | Quit |
+This is **one local client testing two sides**, not two-player multiplayer.
+You can switch seats to act as either side. An opponent's hand is represented
+only by its count in the current seat's HUD; it is not drawn in the room.
+Restarting the app resets these temporary test decks and all table state.
 
-Walk toward a chair until **PRESS E TO SIT** appears. E claims the nearest
-available seat and smoothly changes the camera. E/Escape restores your last
-standing position. Walk around the table to try the opposite chair.
+## Controls
 
-The game automatically pauses when it loses keyboard focus. On returning,
-press Escape to resume. The Phase 0 Space-to-pause-cube control is retired:
-there is no diagnostic cube in the clubhouse.
+Room controls remain WASD, Shift to run, right-drag/arrow keys to orbit, wheel
+to zoom, Home to reset, E to sit, Escape to pause/resume, and Q while paused to
+quit. Losing keyboard focus pauses and cancels an unfinished card drag safely.
 
-## Run the logic tests
+While seated, WASD movement is disabled; D and S become card shortcuts:
 
-Build All also builds `RoomTests.exe`, a small separate console program.
-From Visual Studio's Developer PowerShell at the project root:
+| Input | Table action |
+| --- | --- |
+| Left click | Select a card, hand thumbnail, or pile |
+| Ctrl+click | Add/remove a card from a multi-selection |
+| Left drag | Move selected cards or the selected pile |
+| Drag hand thumbnail onto felt | Play it face up |
+| Drag a loose selection onto hand bar / H | Put cards into your hand |
+| Right click face-up card or own hand card | Enlarged inspection |
+| Shift+right click card / right click pile | Context menu |
+| Click / Escape during inspection | Close inspection |
+| Wheel during public-pile inspection | Browse that pile in order |
+| Double-click a permitted pile / D | Draw one to your hand |
+| Shift+D | Draw seven |
+| S | Shuffle selected pile, or own library if none selected |
+| T | Tap/untap selected cards or pile by 90 degrees |
+| F | Flip selected cards; reveal/hide a selected pile |
+| R / Shift+R | Rotate selected cards or pile by +/-15 degrees |
+| B | Group selected tabletop cards into an ordered pile |
+| X | Split the selected pile's top half into a new pile |
+| Shift+drop onto another pile | Merge the dragged cards/pile into it |
+| L / Shift+L | Return selected cards to own library top / bottom |
+| C | Bring the selected cards/pile back to the table center |
+| Middle drag / right drag on empty felt | Pan tabletop camera |
+| Wheel over table | Zoom camera |
+| Wheel over hand / bracket buttons | Scroll a large hand |
+| Home | Reset tabletop view |
+| G | Toggle the 20-by-10 capacity preview |
+| Escape while dragging | Cancel and restore the pre-drag state |
+| E | Stand; first place or cancel any held card |
+
+Right drag over a card opens inspection/context rather than panning. Middle
+mouse drag is the reliable pan control when cards cover the felt. Unavailable
+context-menu options appear dimmed. Keyboard draw/shuffle shortcuts use your
+library when no pile is selected. Select a different pile to act on it.
+
+The G preview swaps visible game cards for 200 inert reference shapes without
+resetting the underlying table. Press G again to return to the real test decks.
+There is no forced snap grid. Top/bottom return and merge use selection/pile
+order; pile storage is bottom-to-top, and drawing removes its last element.
+
+## What's implemented
+
+- Separate reusable card definitions and uniquely identified session copies.
+- Original generated card fronts and shared backs with readable printed text.
+- Actual camera-ray intersections with rotated card/pile rectangles.
+- Selection, multi-selection, dragging, lift/shadow feedback, surface stacking,
+  tapping, free rotation increments, face flipping, and enlarged inspection.
+- Ordered piles: moving, grouping, shuffling, drawing, splitting, merging,
+  top/bottom returns, public viewing, and preserving empty library anchors.
+- Separate local hands, scrolling, hand-to-table play, and local visibility
+  filtering for hand faces, hidden piles, and face-down cards.
+- Safe drag cancellation on Escape, focus loss, or entering the capacity preview.
+- Retained room walking, collision, both chairs, camera transitions, HUD/pause.
+
+No printed ability, mana requirement, turn, combat, damage, or winner is
+interpreted or resolved. A card saying "draw two" never draws cards by itself.
+Use the physical actions to carry out what the players agree to do.
+
+## Files and concepts
+
+| File | Responsibility |
+| --- | --- |
+| `src/cards/Tabletop.h/.cpp` | Session card/pile data, ordering, movement, visibility, draw/shuffle/split/merge operations and invariants |
+| `src/cards/TabletopController.h/.cpp` | Selection, mouse gestures, hand/context-menu hit tests, inspection and keyboard actions |
+| `src/cards/CardArt.h/.cpp` | Original procedural RGBA fronts/backs; no installed art paths |
+| `src/graphics/Camera.h/.cpp` | Existing cameras plus screen-to-world rays |
+| `src/graphics/Renderer.h/.cpp` | 3D cards, texture upload, highlights, hand thumbnails, menus and inspection |
+| `src/graphics/GlApi.h/.cpp` | Adds typed texture-unit/uniform entry points |
+| `src/graphics/BitmapFont.h/.cpp` | Existing built-in font; vertex format now also carries UV coordinates |
+| `src/core/Application.h/.cpp` | Routes SDL3 events and high-DPI mouse coordinates to the tabletop controller |
+| `src/world/TableLayout.h` | Shared 20-wide/10-deep dimensions, card thickness, seats, spawn and overview |
+| `tests/CardTests.cpp` | Actual card-state/controller/art checks |
+| `tests/CameraTests.cpp` | Actual GLM projection/ray checks for both seats and different aspect ratios |
+| `tests/RoomTests.cpp` | Retained movement/seat checks and updated 200-slot layout checks |
+| `docs/PHASE2_NOTES.md` | Implementation explanations, verification detail and completion checklist |
+| `docs/DESIGN_BASELINE.md` | Authoritative supplied-design requirements record and amendments |
+
+A definition describes what a card is. An instance describes where one physical
+copy is and which zone/pile contains it. Drawing moves an existing ID; it does
+not create another copy. Ownership is unchanged by ordinary moves. These are
+session identities, not yet saved collectible ownership records.
+
+Rendering and input are separate from the card model. That lets tests verify
+card counts and pile order without a window, and lets Phase 3 introduce host
+requests and filtered replication without putting card rules in the renderer.
+The controller keeps a pre-drag snapshot so cancellation restores the actual
+old zone and position rather than leaving a card in two places.
+
+## Verification and your Windows completion gate
+
+Build All produces three separate test programs. After building each preset:
 
 ```powershell
 & .\out\build\windows-debug\RoomTests.exe
-& .\out\build\windows-release\RoomTests.exe
-```
-
-Run the Release command after building the Release preset. A successful test
-run prints PASS. Tests remain enabled in Release; they do not rely on assert.
-You can also use CTest:
-
-```powershell
+& .\out\build\windows-debug\CardTests.exe
+& .\out\build\windows-debug\CameraTests.exe
 ctest --test-dir out/build/windows-debug --output-on-failure
-ctest --test-dir out/build/windows-release --output-on-failure
 ```
 
-These test real movement/collision/seating code without opening a graphics
-window. They do not verify SDL/OpenGL rendering or multiplayer. Detailed tests,
-C++ explanations, changed-file responsibilities, and the manual checklist are
-in **docs/PHASE1_NOTES.md**.
+Repeat with `windows-release` after building Release. Tests do not rely on
+assert, so their checks remain active in Release.
 
-## Quick manual completion check
+Authoring checks include native C++20 compilation of the logic tests, full
+application-source syntax checking against the pinned SDL3 3.2.22 / GLM 1.0.1
+headers, and actual off-screen OpenGL rendering of the real renderer, shaders,
+textures, HUD, inspection and room using a separate EGL harness. That harness
+substitutes only the context/function-loading setup; it does not exercise the
+SDL window/input loop. It is not a Windows MSVC build or a two-PC test.
 
-In both Debug and Release: press G and inspect the full 20 x 20 preview from
-both chairs, test table pan/zoom and Home reset, then walk/run, orbit/zoom,
-collide with every major piece
-of furniture and all four walls, sit/stand at both chairs, pan the tabletop,
-pause/resume, alt-tab, resize/minimize/restore, close, and relaunch. Run the
-headless test executable too. If all work, Phase 1 is complete.
+On Windows, check: room movement still works; both chairs work; the table is
+20 wide/10 deep; G shows 200 references; drawing changes counts correctly;
+hand play, tap/untap, rotation, flip and inspection work; hidden fronts cannot
+be inspected; multi-drag and Escape cancellation work; grouping, split, merge,
+shuffle, returns and public-pile browsing preserve all copies; large hands
+scroll; resizing and focus loss do not strand a card; and both presets run.
 
-**Verification here:** the world/controller/font code passed native GCC
-Debug-like and optimized tests, including the new 400-card layout and camera
-fit checks. Source/configuration
-and archive checks were performed. The complete Phase 1 Windows application
-has not been compiled or visually tested in this authoring environment. Your
-Windows build and manual checklist are the remaining gate.
+## Limits and next milestone
 
-The scale-specific calculations, changes, and test checklist are in
-**docs/TABLE_SCALE.md**. These supersede the original small-table dimensions
-in the Phase 1 historical notes.
+This remains local and temporary. No ENet/Tailscale connection, match/result
+flow, life counters, saved collection/decks, shop/economy, ante, face painter,
+toy chest actions, throws, sounds, or finished title screen exist yet. The shop
+and other station furniture remain placeholders. Current keyboard bindings are
+defaults, with configurable bindings/settings still to come.
 
-## Important files
+Face filtering here is a local presentation policy. Both sides' full test state
+exists in this process, and seat switching intentionally exposes the chosen
+side for testing. **It is not the required network security boundary.** Phase 3
+must keep hidden identities out of unauthorized client payloads altogether.
 
-| File | Purpose |
-| --- | --- |
-| `CMakeLists.txt` | Builds the world library, game, and tests |
-| `CMakePresets.json` | Existing x64 Windows Debug/Release presets |
-| `vcpkg.json` | Same pinned SDL3/GLM dependencies, project version 0.1.1 |
-| `src/core/Application.h/.cpp` | Window lifetime, input, timing, pause, main loop |
-| `src/world/TableLayout.h` | Shared card, capacity, table, room, seating, and overview dimensions |
-| `src/world/Geometry.h/.cpp` | Floor-plane collision and camera intersection math |
-| `src/world/Room.h/.cpp` | Room objects, static colliders, chairs, station proximity |
-| `src/world/Player.h/.cpp` | Walking/facing, local seat ownership, safe stand-up |
-| `src/graphics/Camera.h/.cpp` | Room and table camera with smooth transitions |
-| `src/graphics/Renderer.h/.cpp` | Primitive meshes, room/pawn rendering, HUD |
-| `src/graphics/BitmapFont.h/.cpp` | Batched built-in text geometry |
-| `src/graphics/GlApi.h/.cpp` | Unchanged modern OpenGL entry-point loader |
-| `src/main.cpp` | Unchanged entry point and exception reporting |
-| `tests/RoomTests.cpp` | Headless simulation and HUD-geometry checks |
-| `docs/PHASE1_NOTES.md` | Milestone explanations, tests, limits, next steps |
-| `docs/DESIGN_BASELINE.md` | Supplied GDD requirements record and amendments |
-| `docs/CREATIVE_TOOLS.md` | Future shape builder and paintable world |
-| `docs/TITLE_DIRECTION.md` | Future title-screen gag |
+Cards are thin kinematic tabletop objects. Surface stacking is approximate;
+piles are ordered containers. Cards may be dragged outside the felt, retaining
+the tabletop working-plane height; they do not fall or throw yet. C recalls a
+selected off-table object. There is no rigid-body card physics in this phase.
 
-The world simulation uses simple C++ types and no SDL/GLM dependency; graphics
-uses GLM for matrices. `ClubhouseWorld` is an internal static library, not an
-extra DLL to distribute. No empty placeholder classes have been added for later
-systems.
+The eight definitions and illustrations are original placeholders. Beta/Unlimited
+content remains the intended later card pool. No official MTG art/database is
+bundled, and no spell text is automatically interpreted.
 
-## Fresh Windows setup, if needed
+After both Windows builds pass the checklist, Phase 3 adds the private
+host/client connection, authoritative ordering, simultaneous-grab handling,
+filtered card information, movement synchronization, and reconnection.
 
-Use Visual Studio 2022 17.8+ or a newer compatible Visual Studio version with
-Desktop development with C++, an x64 MSVC toolchain, Windows SDK, C++ CMake
-tools, and Ninja. CMake 3.25+ and an OpenGL 3.3-capable GPU driver are required.
-Install Git for Windows. Open the folder containing this README and the CMake
-manifest directly rather than creating a new Visual Studio template project.
+## Fresh setup
 
-In PowerShell, use a dedicated vcpkg checkout (skip if already set up):
+For a new development PC, use Visual Studio with Desktop development with C++,
+x64 MSVC, Windows SDK, C++ CMake tools/Ninja, CMake 3.25+, Git, and an OpenGL
+3.3-capable graphics driver. Use a dedicated vcpkg checkout:
 
 ```powershell
-New-Item -ItemType Directory -Force C:\dev | Out-Null
 git clone --branch 2025.09.17 https://github.com/microsoft/vcpkg.git C:\dev\vcpkg-femboylover
 git -C C:\dev\vcpkg-femboylover checkout --detach 4334d8b4c8916018600212ab4dd4bbdc343065d1
 & C:\dev\vcpkg-femboylover\bootstrap-vcpkg.bat -disableMetrics
-if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap failed' }
 $env:VCPKG_ROOT = 'C:\dev\vcpkg-femboylover'
 [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $env:VCPKG_ROOT, 'User')
 ```
 
-Restart Visual Studio after setting the environment variable. The presets
-explicitly use `$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake`; a global
-`vcpkg integrate install` is not needed. First configuration installs SDL3
-(3.2.22 at this baseline) and GLM automatically and needs internet access.
-OpenGL links through the platform library and uses the installed GPU driver.
-
-Command-line alternative, in an x64 Visual Studio developer shell at the root:
-
-```powershell
-cmake --preset windows-debug
-cmake --build --preset windows-debug
-& .\out\build\windows-debug\FemboyLover.exe
-cmake --preset windows-release
-cmake --build --preset windows-release
-& .\out\build\windows-release\FemboyLover.exe
-```
-
-Ninja is a single-configuration generator. Select the right preset rather than
-using `--config Release` on a Debug build. SDL3.dll is copied beside the game
-executable by CMake. This remains development source, not the final installer;
-separate-PC runtime packaging comes later.
-
-## Troubleshooting
-
-- **Only generic x64 Debug/Release options:** confirm the opened folder is the
-  one with our manifest and presets, not the outer repository/template folder.
-- **SDL3 not found:** confirm the correct preset and `VCPKG_ROOT`; do not copy
-  DLLs into random folders or substitute SDL2 libraries.
-- **Source file missing:** the `src/world` files must be copied too; this update
-  adds files as well as replacing existing ones.
-- **Wrong program starts:** choose FemboyLover.exe, not RoomTests.exe, beside
-  the green Run button.
-- **No movement:** click the game window; if PAUSED appears, press Escape.
-  WASD intentionally does not move a seated pawn.
-- **Cannot sit:** walk closer to a chair until the prompt appears. E at a shop
-  or another station does not open a menu yet.
-- **Compile/configure error:** send the first error plus nearby Output lines,
-  your selected preset, and a screenshot of the project folder layout.
-- **GL context/shader error:** preserve the full dialog/console message and
-  check the GPU driver. Actual Windows graphics remain to be playtested.
-
-## What is next
-
-After this milestone passes, Phase 2 implements local physical card actions.
-Phase 3 adds authoritative ENet networking over the planned Tailscale direct
-IP connection. There is still no second player, saved collection, card rules
-engine, shop transaction, deck builder, editable face, physics throw, or working
-title menu. Future paintable toys/furniture/walls remain in the design record.
+Restart Visual Studio after setting the environment variable, then open the
+folder containing the manifest/presets directly. The existing preset toolchain
+installs the pinned SDL3 and GLM dependencies automatically. You do not need to
+create a new Visual Studio template project or run global vcpkg integration.

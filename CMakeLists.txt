@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
-project(FemboyLover VERSION 0.1.1 LANGUAGES CXX)
+project(FemboyLover VERSION 0.2.0 LANGUAGES CXX)
 
 find_package(SDL3 3.2 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 
 add_library(ClubhouseWorld STATIC
+    src/cards/Tabletop.cpp
+    src/cards/TabletopController.cpp
     src/world/Geometry.cpp
     src/world/Room.cpp
     src/world/Player.cpp
@@ -17,6 +19,7 @@ set_target_properties(ClubhouseWorld PROPERTIES CXX_EXTENSIONS OFF)
 add_executable(FemboyLover
     src/main.cpp
     src/core/Application.cpp
+    src/cards/CardArt.cpp
     src/graphics/BitmapFont.cpp
     src/graphics/Camera.cpp
     src/graphics/GlApi.cpp
@@ -50,4 +53,13 @@ if(BUILD_TESTING)
     target_link_libraries(RoomTests PRIVATE ClubhouseWorld)
     set_target_properties(RoomTests PROPERTIES CXX_EXTENSIONS OFF)
     add_test(NAME clubhouse-world COMMAND RoomTests)
+    add_executable(CardTests tests/CardTests.cpp src/cards/CardArt.cpp src/graphics/BitmapFont.cpp)
+    target_link_libraries(CardTests PRIVATE ClubhouseWorld)
+    set_target_properties(CardTests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME physical-tabletop COMMAND CardTests)
+    add_executable(CameraTests tests/CameraTests.cpp src/graphics/Camera.cpp)
+    target_link_libraries(CameraTests PRIVATE ClubhouseWorld glm::glm)
+    target_compile_definitions(CameraTests PRIVATE GLM_FORCE_RADIANS)
+    set_target_properties(CameraTests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME camera-rays COMMAND CameraTests)
 endif()

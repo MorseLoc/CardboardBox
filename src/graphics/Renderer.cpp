@@ -1,5 +1,6 @@
 #include "graphics/Renderer.h"
 #include "graphics/BitmapFont.h"
+#include "cards/CardArt.h"
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
 #include <cmath>
@@ -17,19 +18,27 @@ constexpr const char* vertexSource = R"(
 #version 330 core
 layout(location = 0) in vec3 position;
 layout(location = 1) in float shade;
+layout(location = 2) in vec2 texCoord;
+out vec2 uv;
 uniform mat4 mvp;
 out float faceShade;
 void main() {
     gl_Position = mvp * vec4(position, 1.0);
     faceShade = shade;
+    uv=texCoord;
 }
 )";
 constexpr const char* fragmentSource = R"(
 #version 330 core
 in float faceShade;
+in vec2 uv;
+uniform sampler2D imageTexture;
+uniform int useTexture;
 uniform vec3 tint;
 out vec4 color;
-void main() { color = vec4(tint * faceShade, 1.0); }
+void main() { color = vec4(tint * faceShade, 1.0);
+    if(useTexture!=0) color*=texture(imageTexture,uv);
+}
 )";
 using Vertex = RenderVertex;
 }
@@ -48,7 +57,7 @@ GLuint Renderer::compile(GLenum type, const char* source) {
     }
     return shader;
 }
-void Renderer::initialize() {
+void Renderer::initialize(const Tabletop& table) {
     gl_.load();
     // Application owns this renderer and calls shutdown even after partial setup.
     const GLuint vertex = compile(GL_VERTEX_SHADER, vertexSource);
@@ -73,7 +82,8 @@ void Renderer::initialize() {
     }
     mvpLocation_ = gl_.GetUniformLocation(program_, "mvp");
     tintLocation_ = gl_.GetUniformLocation(program_, "tint");
-    if (mvpLocation_ < 0 || tintLocation_ < 0) throw std::runtime_error("Missing shader uniform.");
+    useTextureLocation_=gl_.GetUniformLocation(program_,"useTexture");
+    if (mvpLocation_ < 0 || tintLocation_ < 0 || useTextureLocation_<0) throw std::runtime_error("Missing shader uniform.");
 
     // Reuse primitive meshes for all room pieces and the pawn. Face shading
     // keeps the prototype readable without textures or a lighting dependency.
@@ -124,6 +134,9 @@ void Renderer::initialize() {
         addSurface(p0,p1,p2); addSurface(p0,p2,p3);
     }
     pawnCount_=static_cast<GLsizei>(vertices.size())-pawnFirst_;
+    cardFirst_=static_cast<GLint>(vertices.size());
+    vertices.insert(vertices.end(),{{-0.5F,0,-0.5F,1,0,0},{0.5F,0,-0.5F,1,1,0},{0.5F,0,0.5F,1,1,1},
+                                    {-0.5F,0,-0.5F,1,0,0},{0.5F,0,0.5F,1,1,1},{-0.5F,0,0.5F,1,0,1}});
     gl_.GenVertexArrays(1,&vao_); gl_.GenBuffers(1,&vbo_);
     gl_.GenVertexArrays(1,&uiVao_); gl_.GenBuffers(1,&uiVbo_);
     if (!vao_ || !vbo_ || !uiVao_ || !uiVbo_) throw std::runtime_error("Could not allocate mesh buffers.");
@@ -134,14 +147,32 @@ void Renderer::initialize() {
         gl_.EnableVertexAttribArray(1);
         gl_.VertexAttribPointer(1,1,GL_FLOAT,GL_FALSE,sizeof(Vertex),
                                reinterpret_cast<const void*>(offsetof(Vertex,shade)));
+        gl_.EnableVertexAttribArray(2);
+        gl_.VertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,sizeof(Vertex),reinterpret_cast<const void*>(offsetof(Vertex,u)));
     };
     layout(vao_,vbo_);
     gl_.BufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(vertices.size()*sizeof(Vertex)),vertices.data(),GL_STATIC_DRAW);
     layout(uiVao_,uiVbo_);
     gl_.BindVertexArray(0);
+    textures_.resize(table.definitions().size()+1);
+    glGenTextures(static_cast<GLsizei>(textures_.size()),textures_.data());
+    gl_.ActiveTexture(GL_TEXTURE0);
+    for(std::size_t i=0;i<textures_.size();++i) {
+        const auto image=makeCardImage(i<table.definitions().size() ? &table.definitions()[i]:nullptr);
+        glBindTexture(GL_TEXTURE_2D,textures_[i]);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,image.width,image.height,0,GL_RGBA,GL_UNSIGNED_BYTE,image.rgba.data());
+    }
+    gl_.UseProgram(program_);
+    gl_.Uniform1i(gl_.GetUniformLocation(program_,"imageTexture"),0);
+    gl_.Uniform1i(useTextureLocation_,0);
     glEnable(GL_DEPTH_TEST);
 }
 void Renderer::shutdown() noexcept {
+    if(!textures_.empty()) {glDeleteTextures(static_cast<GLsizei>(textures_.size()),textures_.data());textures_.clear();}
     if (uiVbo_) { gl_.DeleteBuffers(1,&uiVbo_); uiVbo_=0; }
     if (uiVao_) { gl_.DeleteVertexArrays(1,&uiVao_); uiVao_=0; }
     if (vbo_) { gl_.DeleteBuffers(1, &vbo_); vbo_ = 0; }
@@ -150,6 +181,7 @@ void Renderer::shutdown() noexcept {
 }
 void Renderer::mesh(const glm::mat4& vp,Shape shape,glm::vec3 position,glm::vec3 scale,
                     glm::vec3 color,float rotation) {
+    gl_.Uniform1i(useTextureLocation_,0);
     auto model=glm::translate(glm::mat4{1.0F},position);
     model=glm::rotate(model,rotation,glm::vec3{0,1,0});
     model=glm::scale(model,scale);
@@ -177,66 +209,139 @@ void Renderer::drawPawn(const glm::mat4& vp,const Player& player) {
     }
     mesh(vp,Shape::Box,local(0,0.94F,0.329F),{0.11F,0.025F,0.025F},{0.35F,0.12F,0.21F},yaw);
 }
-void Renderer::drawHud(int width,int height,const Room& room,const Player& player,bool paused) {
-    glDisable(GL_DEPTH_TEST);
-    gl_.BindVertexArray(uiVao_);
-    gl_.BindBuffer(GL_ARRAY_BUFFER,uiVbo_);
+GLuint Renderer::cardTexture(std::optional<std::size_t> definition) const {
+    return definition && *definition+1<textures_.size() ? textures_[*definition]:textures_.back();
+}
+void Renderer::cardFace(const glm::mat4& vp,glm::vec3 position,float angle,GLuint texture) {
+    auto model=glm::translate(glm::mat4{1},position);
+    model=glm::rotate(model,angle,glm::vec3{0,1,0});
+    model=glm::scale(model,glm::vec3{layout::cardWidth,1,layout::cardDepth});
+    const auto mvp=vp*model;const glm::vec3 white{1};
+    gl_.UniformMatrix4fv(mvpLocation_,1,GL_FALSE,glm::value_ptr(mvp));
+    gl_.Uniform3fv(tintLocation_,1,glm::value_ptr(white));
+    gl_.Uniform1i(useTextureLocation_,1);glBindTexture(GL_TEXTURE_2D,texture);
+    glDrawArrays(GL_TRIANGLES,cardFirst_,6);
+    gl_.Uniform1i(useTextureLocation_,0);
+}
+void Renderer::drawCards(const glm::mat4& vp,const Tabletop& table,const TabletopController& controls,int viewer) {
+    const auto render=[&](Vec2 position,float top,float angle,float thickness,GLuint texture,bool selected,bool held) {
+        if(held) mesh(vp,Shape::Box,{position.x,1.352F,position.z},
+                       {layout::cardWidth+0.04F,0.0003F,layout::cardDepth+0.04F},{0.08F,0.15F,0.13F},angle);
+        mesh(vp,Shape::Box,{position.x,top-thickness/2,position.z},
+             {layout::cardWidth,thickness,layout::cardDepth},{0.22F,0.18F,0.24F},angle);
+        if(selected) mesh(vp,Shape::Box,{position.x,top+0.0002F,position.z},
+                          {layout::cardWidth+0.026F,0.0002F,layout::cardDepth+0.026F},{0.98F,0.48F,0.69F},angle);
+        cardFace(vp,{position.x,top+0.0007F,position.z},angle,texture);
+    };
+    for(const auto& [id,c]:table.cards()) if(c.zone==CardZone::Table)
+        render(c.position,c.height+layout::cardThickness/2,c.angle+(c.tapped?1.57079633F:0),layout::cardThickness,
+               cardTexture(table.visibleDefinition(id,viewer)),controls.selected(id),table.dragged(id));
+    for(const auto& [id,p]:table.piles()) {
+        const float thickness=layout::cardThickness*static_cast<float>(std::max<std::size_t>(1,p.cards.size()));
+        const auto definition=p.cards.empty()?std::nullopt:table.visibleDefinition(p.cards.back(),viewer);
+        render(p.position,1.35F+thickness+(table.draggedPile(id)?0.15F:0),p.angle+(p.tapped?1.57079633F:0),thickness,
+               cardTexture(definition),controls.selectedPile()==id,table.draggedPile(id));
+    }
+}
+void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room,const Player& player,bool paused,
+                       const Tabletop& table,const TabletopController& controls) {
+    glDisable(GL_DEPTH_TEST);gl_.BindVertexArray(uiVao_);gl_.BindBuffer(GL_ARRAY_BUFFER,uiVbo_);
     const float w=static_cast<float>(width),h=static_cast<float>(height);
-    const float scale=std::max(0.65F,std::min(w/1280.0F,h/720.0F));
+    const TableUiLayout ui{w,h};const float s=ui.scale;
     const auto ortho=glm::ortho(0.0F,w,h,0.0F,-1.0F,1.0F);
-    gl_.UniformMatrix4fv(mvpLocation_,1,GL_FALSE,glm::value_ptr(ortho));
-    const auto batch = [&](const std::vector<Vertex>& vertices,glm::vec3 color) {
-        if (vertices.empty()) return;
+    const auto batch=[&](const std::vector<Vertex>& vertices,glm::vec3 color) {
+        if(vertices.empty()) return;
+        gl_.Uniform1i(useTextureLocation_,0);
+        gl_.UniformMatrix4fv(mvpLocation_,1,GL_FALSE,glm::value_ptr(ortho));
         gl_.Uniform3fv(tintLocation_,1,glm::value_ptr(color));
         gl_.BufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(vertices.size()*sizeof(Vertex)),vertices.data(),GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(vertices.size()));
     };
-    std::vector<Vertex> panels;
-    appendRectangle(panels,16*scale,16*scale,640*scale,104*scale);
-    appendRectangle(panels,16*scale,h-100*scale,w-32*scale,84*scale);
-    if (paused) appendRectangle(panels,w/2-240*scale,h/2-60*scale,480*scale,120*scale);
-    batch(panels,{0.12F,0.09F,0.15F});
+    const auto panel=[&](UiRect r,glm::vec3 color) {std::vector<Vertex> v;appendRectangle(v,r.x,r.y,r.w,r.h);batch(v,color);};
+    const auto picture=[&](UiRect r,GLuint texture) {
+        const std::vector<Vertex> v{{r.x,r.y,0,1,0,0},{r.x+r.w,r.y,0,1,1,0},{r.x+r.w,r.y+r.h,0,1,1,1},
+                                    {r.x,r.y,0,1,0,0},{r.x+r.w,r.y+r.h,0,1,1,1},{r.x,r.y+r.h,0,1,0,1}};
+        gl_.Uniform1i(useTextureLocation_,1);glBindTexture(GL_TEXTURE_2D,texture);
+        gl_.UniformMatrix4fv(mvpLocation_,1,GL_FALSE,glm::value_ptr(ortho));
+        const glm::vec3 white{1};gl_.Uniform3fv(tintLocation_,1,glm::value_ptr(white));
+        gl_.BufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(v.size()*sizeof(Vertex)),v.data(),GL_STREAM_DRAW);
+        glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(v.size()));gl_.Uniform1i(useTextureLocation_,0);
+    };
+    const bool active=player.seated() && !room.capacityPreviewEnabled();
+    const glm::vec3 dark{0.12F,0.09F,0.15F},white{0.94F,0.85F,0.80F},pink{1,0.68F,0.78F};
+    panel({16*s,16*s,900*s,92*s},dark);
+    panel(active?ui.handArea():UiRect{16*s,h-100*s,w-32*s,84*s},dark);
     std::vector<Vertex> text;
-    appendText(text,"FEMBOYLOVER.EXE / PHASE 1.1",30*scale,30*scale,3*scale);
-    appendText(text,player.seated() ? "TABLE VIEW - ONE LOCAL PLAYER" : "THE CLUBHOUSE - ONE LOCAL PLAYER",30*scale,64*scale,2*scale);
-    appendText(text,room.capacityPreviewEnabled() ? "G: HIDE PREVIEW / 20 X 20 SLOTS / 400 PLACEHOLDERS" : "G: SHOW 20 X 20 CARD-CAPACITY PREVIEW",30*scale,90*scale,2*scale);
-    const float bottom=h-84*scale;
-    if (player.seated()) {
-        appendText(text,"E OR ESC: STAND   RIGHT-DRAG: PAN   WHEEL: ZOOM",30*scale,bottom,2*scale);
-        appendText(text,"HOME: RESET VIEW   SAMPLE CARDS ARE DECORATIVE",30*scale,bottom+26*scale,2*scale);
+    appendText(text,"FEMBOYLOVER.EXE / PHASE 2",30*s,28*s,3*s);
+    std::string heading="20 WIDE X 10 DEEP / G: CAPACITY PREVIEW / ONE LOCAL CLIENT";
+    if(room.capacityPreviewEnabled()) heading="200-SLOT CAPACITY PREVIEW / G: RETURN TO CARDS";
+    appendText(text,heading,30*s,62*s,2*s);
+    if(active) {
+        appendText(text,controls.status().substr(0,68),30*s,84*s,1.5F*s);
+        const auto hand=table.hand(controls.viewer());
+        const auto other=table.hand(1-controls.viewer());
+        const std::string counts="YOUR HAND "+std::to_string(hand.size())+" / OTHER HAND "+std::to_string(other.size())+" / WHEEL OVER HAND TO SCROLL";
+        appendText(text,counts,24*s,h-177*s,2*s);
+        appendText(text,"T TAP / F FLIP / R ROTATE / H HAND / B PILE / X SPLIT / L LIBRARY TOP / SHIFT L BOTTOM",24*s,h-38*s,1.5F*s);
+        appendText(text,"D DRAW / SHIFT D DRAW 7 / S SHUFFLE / SHIFT DROP MERGES PILES / RIGHT-CLICK INSPECT / E STAND",24*s,h-20*s,1.5F*s);
+        appendText(text,"[",24*s,h-111*s,3*s);appendText(text,"]",w-40*s,h-111*s,3*s);
+        const int maxOffset=std::max(0,static_cast<int>(hand.size())-ui.handSlots());
+        const int offset=std::clamp(controls.handOffset(),0,maxOffset);
+        for(int i=0;i<ui.handSlots() && offset+i<static_cast<int>(hand.size());++i) {
+            const auto id=hand[static_cast<std::size_t>(offset+i)];const auto r=ui.handCard(i);
+            if(controls.selected(id)) panel({r.x-3*s,r.y-3*s,r.w+6*s,r.h+6*s},pink);
+            picture(r,cardTexture(table.visibleDefinition(id,controls.viewer())));
+        }
+        for(const auto& [id,p]:table.piles()) {
+            (void)id;
+            const auto projected=vp*glm::vec4{p.position.x,1.45F+static_cast<float>(p.cards.size())*layout::cardThickness,p.position.z,1};
+            if(projected.w>0) appendText(text,std::to_string(p.cards.size()),(projected.x/projected.w+1)*w/2,
+                                       (1-projected.y/projected.w)*h/2-18*s,2*s);
+        }
     } else {
-        appendText(text,"WASD: WALK   SHIFT: RUN   RIGHT-DRAG: LOOK   WHEEL: ZOOM",30*scale,bottom,2*scale);
-        appendText(text,"E: SIT NEAR A CHAIR   HOME: RESET CAMERA   ESC: PAUSE",30*scale,bottom+26*scale,2*scale);
-    }
-    batch(text,{0.94F,0.85F,0.80F});
-    std::vector<Vertex> accent;
-    if (paused) {
-        appendText(accent,"PAUSED",w/2-54*scale,h/2-34*scale,3*scale);
-        appendText(accent,"ESC: RESUME   Q: QUIT",w/2-120*scale,h/2+10*scale,2*scale);
-    } else if (!player.seated()) {
-        if (room.nearestFreeSeat(player.position())>=0)
-            appendText(accent,"PRESS E TO SIT",30*scale,bottom-38*scale,3*scale);
-        else {
+        appendText(text,"WASD: WALK / SHIFT: RUN / RIGHT-DRAG: LOOK OR TABLE PAN / WHEEL: ZOOM",30*s,h-82*s,1.8F*s);
+        appendText(text,"E: SIT OR STAND / HOME: RESET CAMERA / G: 20 X 10 PREVIEW / ESC: PAUSE",30*s,h-53*s,1.8F*s);
+        if(!player.seated() && room.nearestFreeSeat(player.position())>=0)
+            appendText(text,"PRESS E TO SIT",30*s,h-138*s,3*s);
+        else if(!player.seated()) {
             const auto label=room.nearbyStation(player.position());
-            if (!label.empty()) appendText(accent,label,30*scale,bottom-32*scale,2*scale);
+            if(!label.empty()) appendText(text,label,30*s,h-138*s,2*s);
         }
     }
-    batch(accent,{1.0F,0.71F,0.79F});
-    gl_.BindVertexArray(0);
-    glEnable(GL_DEPTH_TEST);
+    batch(text,white);
+    if(active && controls.menuOpen()) {
+        const auto r=controls.menuRect();panel(r,{0.20F,0.14F,0.24F});text.clear();
+        for(int row=0;row<TabletopController::menuRows;++row) {
+            text.clear();
+            appendText(text,TabletopController::menuLabel(row),r.x+9*s,r.y+(8+static_cast<float>(row)*28)*s,1.5F*s);
+            batch(text,controls.menuEnabled(row)?white:glm::vec3{0.45F,0.40F,0.45F});
+        }
+    }
+    if(active) if(const auto inspected=controls.inspected()) {
+        const float ih=std::min(h-100*s,720*s),iw=ih*0.7F;
+        panel({(w-iw)/2-14*s,30*s,iw+28*s,ih+56*s},dark);
+        picture({(w-iw)/2,42*s,iw,ih},cardTexture(table.visibleDefinition(*inspected,controls.viewer())));
+        text.clear();appendText(text,controls.inspectionCaption(),(w-iw)/2,ih+56*s,1.5F*s);batch(text,white);
+    }
+    if(paused) {
+        panel({w/2-240*s,h/2-60*s,480*s,120*s},dark);text.clear();
+        appendText(text,"PAUSED",w/2-54*s,h/2-34*s,3*s);
+        appendText(text,"ESC: RESUME / Q: QUIT",w/2-120*s,h/2+10*s,2*s);batch(text,pink);
+    }
+    gl_.BindVertexArray(0);glEnable(GL_DEPTH_TEST);
 }
-void Renderer::draw(int width,int height,const glm::mat4& vp,const Room& room,const Player& player,bool paused) {
-    glViewport(0,0,width,height);
-    glClearColor(0.12F,0.09F,0.16F,1.0F);
+void Renderer::draw(int width,int height,const glm::mat4& vp,const Room& room,const Player& player,bool paused,
+                    const Tabletop& table,const TabletopController& controls) {
+    glViewport(0,0,width,height);glClearColor(0.12F,0.09F,0.16F,1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-    gl_.UseProgram(program_); gl_.BindVertexArray(vao_);
-    for (const auto& o : room.objects())
-        mesh(vp,o.shape,{o.position.x,o.position.y,o.position.z},{o.size.x,o.size.y,o.size.z},
-              {o.color.x,o.color.y,o.color.z},o.yaw);
-    for (const auto& o : room.displayCards())
-        mesh(vp,o.shape,{o.position.x,o.position.y,o.position.z},{o.size.x,o.size.y,o.size.z},
-             {o.color.x,o.color.y,o.color.z},o.yaw);
+    gl_.UseProgram(program_);gl_.ActiveTexture(GL_TEXTURE0);gl_.BindVertexArray(vao_);
+    for(const auto& o:room.objects()) mesh(vp,o.shape,{o.position.x,o.position.y,o.position.z},
+        {o.size.x,o.size.y,o.size.z},{o.color.x,o.color.y,o.color.z},o.yaw);
+    if(room.capacityPreviewEnabled()) {
+        for(const auto& o:room.displayCards()) mesh(vp,o.shape,{o.position.x,o.position.y,o.position.z},
+            {o.size.x,o.size.y,o.size.z},{o.color.x,o.color.y,o.color.z},o.yaw);
+    } else drawCards(vp,table,controls,player.seated()?player.seat():-1);
     drawPawn(vp,player);
-    drawHud(width,height,room,player,paused);
+    drawHud(width,height,vp,room,player,paused,table,controls);
 }
 }

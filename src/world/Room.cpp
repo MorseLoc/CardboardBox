@@ -15,7 +15,7 @@ void Room::sphere(Vec3 p, Vec3 s, Vec3 color) { objects_.push_back({Shape::Spher
 Room::Room() {
     const Vec3 wood{0.43F,0.25F,0.17F}, darkWood{0.24F,0.14F,0.13F};
     // The larger room preserves walking space and station access around a
-    // table that genuinely accommodates twenty by twenty upright cards.
+    // table that genuinely accommodates twenty by ten upright cards.
     box({0,-0.12F,0},{layout::roomHalfWidth*2,0.24F,layout::roomHalfDepth*2},{0.46F,0.32F,0.25F});
     for (int i=-13;i<=13;++i)
         box({static_cast<float>(i)*0.75F,0.002F,0},{0.018F,0.006F,19.6F},{0.29F,0.19F,0.18F});
@@ -31,12 +31,12 @@ Room::Room() {
     box({0,2.65F,-9.64F},{0.09F,1.65F,0.06F},wood);
     box({0,2.65F,-9.64F},{2.6F,0.09F,0.06F},wood);
     sphere({0.80F,3.05F,-9.58F},{0.30F,0.30F,0.04F},{0.95F,0.82F,0.56F});
-    box({0,0.015F,0},{10.3F,0.025F,15.6F},{0.30F,0.25F,0.37F});
+    box({0,0.015F,0},{10.3F,0.025F,11.2F},{0.30F,0.25F,0.37F});
     // Table footprint intentionally blocks walking underneath it. Cards stay
     // small; navigation, seats, camera and room dimensions grow with the table.
     box({0,1.17F,0},{layout::tableWidth,0.30F,layout::tableDepth},wood,true);
     box({0,1.335F,0},{layout::feltWidth,0.03F,layout::feltDepth},{0.16F,0.38F,0.30F});
-    for (float x : {-3.25F,3.25F}) for (float z : {-4.6F,4.6F})
+    for (float x : {-3.25F,3.25F}) for (float z : {-2.4F,2.4F})
         box({x,0.52F,z},{0.30F,1.04F,0.30F},darkWood);
     // Two visible chairs, centered on the short ends of the play area.
     for (const auto& seat : seats_) {
@@ -75,7 +75,7 @@ Room::Room() {
         sphere({x,0.08F,7.3F},{0.65F,0.15F,0.65F},darkWood);
         sphere({x,1.96F,7.3F},{0.68F,0.62F,0.68F},{0.98F,0.76F,0.46F});
     }
-    // Two sample shapes in normal view; G displays the same size in 400 slots.
+    // Two sample shapes in normal view; G displays the same size in 200 slots.
     const Vec3 cardSize{layout::cardWidth,layout::cardThickness,layout::cardDepth};
     sampleCards_.push_back({Shape::Box,{-1.15F,layout::cardCenterY,0.25F},cardSize,{0.95F,0.84F,0.64F}});
     sampleCards_.push_back({Shape::Box,{1.15F,layout::cardCenterY,-0.25F},cardSize,{0.54F,0.59F,0.92F}});

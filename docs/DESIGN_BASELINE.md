@@ -47,6 +47,12 @@ with the source so later implementation steps retain the project's direction.
    room/seat/camera adjustments and a toggleable 400-placeholder sizing preview.
    Future physical card dimensions must reuse `src/world/TableLayout.h`.
 
+8. Phase 2 amendment: the user revised the capacity to **20 cards wide by
+   10 tall/deep**, replacing the 20-by-20 target in amendment 7. Use the shared
+   `TableLayout.h` dimensions: 7.2 x 5.4 felt with 0.28 x 0.40 cards and small
+   gaps. Both seats face across the long edges. G now shows 200 reference
+   shapes. This remains a capacity guide, not an enforced grid or card limit.
+
 ## 1–5. Vision and room
 
 - Private native Windows PC game for exactly two people using the same
@@ -221,12 +227,11 @@ with the source so later implementation steps retain the project's direction.
 | 9 | Face drawing/erase/color/save/orb mapping/sync; both faces persist and display |
 | 10 | Lighting/UI/audio/animation/settings/restart/disconnect/ownership testing; Release package and separate-PC test without dev tools |
 
-Status updated 2026-10-28: the user launched Phase 0 on Windows and confirmed
-the requested checks were done, authorizing Phase 1. Phase 1 source now adds
-local clubhouse exploration, pawn movement, collision, two seats, tabletop
-camera transitions, HUD, and pause. The user confirmed Phase 1 runs well. The scale revision (0.1.1) now needs
-its Windows visual check before Phase 2 continues. Later systems remain
-unimplemented. See `PHASE1_NOTES.md` and `TABLE_SCALE.md`.
+Status: the user confirmed the clubhouse runs well and authorized Phase 2,
+with a revised 20-wide/10-deep table. Phase 2 source adds local physical cards,
+ordered piles, hands, inspection and tests. It is not multiplayer and has no
+persistent collection. Its Windows Debug/Release interaction checklist is
+pending. Later systems remain unimplemented. See `PHASE2_NOTES.md`.
 
 ## 55. Required verification as systems arrive
 

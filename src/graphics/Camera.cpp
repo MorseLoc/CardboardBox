@@ -12,10 +12,10 @@ void Camera::orbit(float horizontal, float vertical) {
 void Camera::pan(float horizontal, float vertical, int seat) {
     const float side = seat == 1 ? -1.0F : 1.0F;
     tablePan_.x = std::clamp(tablePan_.x + horizontal * side, -2.8F, 2.8F);
-    tablePan_.y = std::clamp(tablePan_.y + vertical * side, -4.2F, 4.2F);
+    tablePan_.y = std::clamp(tablePan_.y + vertical * side, -2.1F, 2.1F);
 }
 void Camera::zoom(float steps, bool seated) {
-    if (seated) tableDistance_ = std::clamp(tableDistance_ - steps * 0.80F, 5.0F, 25.0F);
+    if (seated) tableDistance_ = std::clamp(tableDistance_ - steps * 0.80F, 3.8F, 20.0F);
     else distance_ = std::clamp(distance_ - steps * 0.35F, 2.8F, 7.0F);
 }
 void Camera::reset() {
@@ -41,6 +41,14 @@ void Camera::update(float dt, Vec2 player, int seat, const Room& room, bool snap
     const auto clipped = room.clipCamera({target_.x,target_.y,target_.z},{eye_.x,eye_.y,eye_.z});
     eye_ = {clipped.x,clipped.y,clipped.z};
     if (glm::length(eye_-target_) < 0.05F) eye_ = target_ + glm::vec3{0,0.05F,0.05F};
+}
+Ray Camera::screenRay(float normalizedX,float normalizedY,float aspect) const {
+    const auto inverse=glm::inverse(viewProjection(aspect));
+    auto nearPoint=inverse*glm::vec4{normalizedX*2-1,1-normalizedY*2,-1,1};
+    auto farPoint=inverse*glm::vec4{normalizedX*2-1,1-normalizedY*2,1,1};
+    nearPoint/=nearPoint.w;farPoint/=farPoint.w;
+    const auto direction=glm::normalize(glm::vec3{farPoint-nearPoint});
+    return {{nearPoint.x,nearPoint.y,nearPoint.z},{direction.x,direction.y,direction.z}};
 }
 glm::mat4 Camera::viewProjection(float aspect) const {
     return glm::perspective(glm::radians(55.0F), aspect, 0.06F, 100.0F)

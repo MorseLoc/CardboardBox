@@ -21,6 +21,7 @@ void GlApi::load() {
     FL_LOAD(GetProgramiv); FL_LOAD(GetProgramInfoLog); FL_LOAD(DeleteProgram);
     FL_LOAD(UseProgram); FL_LOAD(GetUniformLocation);
     FL_LOAD(UniformMatrix4fv); FL_LOAD(Uniform3fv);
+    FL_LOAD(Uniform1i); FL_LOAD(ActiveTexture);
 #undef FL_LOAD
 }
 }

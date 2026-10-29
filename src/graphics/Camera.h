@@ -1,5 +1,6 @@
 #pragma once
 #include "world/Room.h"
+#include "cards/Tabletop.h"
 #include <glm/glm.hpp>
 
 namespace fl {
@@ -10,6 +11,7 @@ public:
     void zoom(float steps, bool seated);
     void reset();
     void update(float dt, Vec2 player, int seat, const Room& room, bool snap = false);
+    [[nodiscard]] Ray screenRay(float normalizedX,float normalizedY,float aspect) const;
     [[nodiscard]] float yaw() const { return yaw_; }
     [[nodiscard]] glm::mat4 viewProjection(float aspect) const;
 private:

@@ -88,7 +88,7 @@ void tableCapacityTests() {
     check(room.displayCards().size()==2,"Normal preview should contain two samples");
     room.toggleCapacityPreview();
     const auto& cards=room.displayCards();
-    check(cards.size()==400,"Capacity preview must contain 20 x 20 cards");
+    check(cards.size()==200,"Capacity preview must contain 20 x 10 cards");
     std::vector<float> xs,zs;
     for (std::size_t i=0;i<cards.size();++i) {
         const auto& c=cards[i];
@@ -104,7 +104,7 @@ void tableCapacityTests() {
             check(separatedX || separatedZ,"Capacity cards overlap");
         }
     }
-    check(xs.size()==20 && zs.size()==20,"Preview does not have exactly 20 rows and columns");
+    check(xs.size()==20 && zs.size()==10,"Preview does not have exactly 20 columns and 10 rows");
     room.toggleCapacityPreview();
     check(room.displayCards().size()==2,"Capacity preview did not restore samples");
     // Project the full felt corners using the overview configuration and room
@@ -121,7 +121,7 @@ void tableCapacityTests() {
                 const float depth=actualDistance-dy*std::sin(pitch)-z*sign*std::cos(pitch);
                 const float screenY=(dy*std::cos(pitch)-z*sign*std::sin(pitch))/(depth*std::tan(0.47996554F));
                 const float screenX=x/(depth*std::tan(0.47996554F)*1.6F);
-                check(depth>0 && std::abs(screenX)<0.9F && screenY>-0.68F && screenY<0.63F,"Default overview crops the felt or hides it under HUD");
+                check(depth>0 && std::abs(screenX)<0.9F && screenY>-0.44F && screenY<0.63F,"Default overview crops the felt or hides it under HUD");
             }
     }
 }
@@ -135,7 +135,7 @@ void fontTests() {
 int main() {
     try {
         collisionTests(); playerAndSeatTests(); tableCapacityTests(); fontTests();
-        std::cout<<"PASS: collision, no tunneling, wall sliding, boundaries, camera rays, movement, both seats, seat exclusivity, safe standing, 15000 movement steps, 400-card layout with no overlap, both-seat overview fit, HUD geometry\n";
+        std::cout<<"PASS: collision, no tunneling, wall sliding, boundaries, camera rays, movement, both seats, seat exclusivity, safe standing, 15000 movement steps, 200-card layout with no overlap, both-seat overview fit, HUD geometry\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& e) {
         std::cerr<<"FAIL: "<<e.what()<<'\n'; return EXIT_FAILURE;
