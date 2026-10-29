@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.25)
-project(FemboyLover VERSION 0.2.2 LANGUAGES CXX)
+project(FemboyLover VERSION 0.3.0 LANGUAGES CXX)
 
 find_package(SDL3 3.2 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(unofficial-enet CONFIG REQUIRED)
 
 add_library(ClubhouseWorld STATIC
     src/cards/CardCatalog.cpp
@@ -17,6 +18,14 @@ add_library(ClubhouseWorld STATIC
 target_compile_features(ClubhouseWorld PUBLIC cxx_std_20)
 target_include_directories(ClubhouseWorld PUBLIC src)
 set_target_properties(ClubhouseWorld PROPERTIES CXX_EXTENSIONS OFF)
+
+add_library(ClubhouseNetwork STATIC src/networking/RoomProtocol.cpp src/networking/NetworkRoom.cpp)
+target_link_libraries(ClubhouseNetwork PUBLIC ClubhouseWorld unofficial::enet::enet)
+target_compile_definitions(ClubhouseNetwork PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+set_target_properties(ClubhouseNetwork PROPERTIES CXX_EXTENSIONS OFF)
+if(WIN32)
+    target_link_libraries(ClubhouseNetwork PUBLIC ws2_32 winmm)
+endif()
 
 add_executable(FemboyLover
     src/main.cpp
@@ -32,7 +41,7 @@ target_compile_features(FemboyLover PRIVATE cxx_std_20)
 set_target_properties(FemboyLover PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(FemboyLover PRIVATE src)
 target_include_directories(FemboyLover SYSTEM PRIVATE ${Stb_INCLUDE_DIR})
-target_link_libraries(FemboyLover PRIVATE ClubhouseWorld SDL3::SDL3 glm::glm OpenGL::GL)
+target_link_libraries(FemboyLover PRIVATE ClubhouseWorld ClubhouseNetwork SDL3::SDL3 glm::glm OpenGL::GL)
 target_compile_definitions(FemboyLover PRIVATE SDL_MAIN_HANDLED GLM_FORCE_RADIANS NOMINMAX WIN32_LEAN_AND_MEAN)
 if(MSVC)
     target_compile_options(ClubhouseWorld PRIVATE /W4 /permissive- /utf-8 /EHsc)
@@ -53,6 +62,10 @@ endif()
 # These headless tests exercise real movement/seating logic, not rendering.
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(NetworkTests tests/NetworkTests.cpp)
+    target_link_libraries(NetworkTests PRIVATE ClubhouseNetwork)
+    add_test(NAME room-network COMMAND NetworkTests)
+    set_tests_properties(room-network PROPERTIES TIMEOUT 30)
     add_executable(RoomTests tests/RoomTests.cpp src/graphics/BitmapFont.cpp)
     target_link_libraries(RoomTests PRIVATE ClubhouseWorld)
     set_target_properties(RoomTests PROPERTIES CXX_EXTENSIONS OFF)

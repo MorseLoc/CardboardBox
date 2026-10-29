@@ -3,6 +3,7 @@
 #include "graphics/Renderer.h"
 #include "world/Player.h"
 #include <SDL3/SDL.h>
+#include "networking/NetworkRoom.h"
 
 namespace fl {
 class Application {
@@ -15,6 +16,9 @@ public:
 private:
     void initialize();
     void processEvents();
+    void openConnectionMenu();
+    bool connectionEvent(const SDL_Event& event);
+    void updateNetwork(float dt,net::MovementInput input);
     void pointer(float logicalX,float logicalY);
     std::optional<Ray> pointerRay() const;
     SDL_Window* window_ = nullptr;
@@ -28,6 +32,10 @@ private:
     TabletopController controls_{table_};
     Room room_;
     Player player_;
+    Player remote_;
+    net::NetworkRoom network_;
+    ConnectionView connection_;
+    bool haveRemote_=false;
     Camera camera_;
     Renderer renderer_;
 };

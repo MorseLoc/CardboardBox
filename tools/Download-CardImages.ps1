@@ -2,12 +2,15 @@
 # Run with Windows PowerShell 5.1 from the project root; restart the game afterward.
 [CmdletBinding()]
 param(
-    [string]$Manifest = (Join-Path $PSScriptRoot '..\data\sets\unlimited-images.json'),
+    [string]$Manifest = '',
     [string]$CacheRoot = (Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'FemboyLover\Clubhouse\cards'),
     [int]$Limit = 0,
     [switch]$Force
 )
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($Manifest)) {
+    $Manifest = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) '..\data\sets\unlimited-images.json'
+}
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $userAgent = 'FemboyLover-CardImporter/0.2.2 (private tabletop; local cache)'
 $manifestData = Get-Content -LiteralPath $Manifest -Raw -Encoding UTF8 | ConvertFrom-Json

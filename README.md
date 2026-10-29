@@ -1,3 +1,30 @@
+# FemboyLover.exe — Phase 3A: private room connection
+
+This update adds **Host / Join, two synchronized pawns, host-controlled movement
+and seating, version/content checks, and in-memory reconnection** using ENet.
+Unlimited is the only planned card set. Your existing artwork cache remains usable.
+
+**This is the first Phase 3 milestone. Networked card actions are next.**
+Network rooms intentionally show an empty table; choose **L: Local Tabletop**
+to keep using all Phase 2 cards and controls.
+
+1. Copy all update files into your current project root and let CMake install
+   the new `enet` dependency. Build All with `windows-debug`, then F5.
+2. Press **H** to host. Open a second game window, press **J**, clear the field
+   with **Ctrl+A**, type **127.0.0.1**, then Enter.
+3. Walk with WASD; each window should see pink host and blue guest. E sits at
+   your assigned chair. Escape resumes local input after switching windows.
+4. **F2** returns to the menu; **F5** on the guest reconnects without clearing
+   its in-memory token. A restarted guest needs the host to reopen the room.
+5. After the same-PC test passes, run the same build on both PCs and enter the
+   host's private Tailscale IPv4 address instead. The game listens on UDP 33445.
+
+For exact build/run/test instructions, file explanations, Windows checks and
+known limitations, read **[docs/PHASE3_NETWORK.md](docs/PHASE3_NETWORK.md)**.
+The following Phase 2 documentation describes local tabletop mode.
+
+---
+
 # FemboyLover.exe — Phase 2: physical tabletop
 
 A local C++20 / SDL3 / OpenGL card-table prototype on top of the working

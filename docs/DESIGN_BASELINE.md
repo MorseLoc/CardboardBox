@@ -310,3 +310,11 @@ pending. Later systems remain unimplemented. See `PHASE2_NOTES.md`.
 - Implement after the reliable core, reusing the Phase 8 toys and Phase 9
   painter. Proposed sequence: toy builder, shared surface painting, then
   furniture construction. Detailed plan and future tests: `CREATIVE_TOOLS.md`.
+
+
+## Amendment 10: Unlimited only and Phase 3A
+
+The user clarified that Beta need not be imported: Unlimited is the selected
+card pool. Phase 3 is delivered incrementally. The first room-connection build
+retains local tabletop mode and exposes network cards only after an authoritative,
+privacy-filtered card protocol is implemented and tested. See PHASE3_NETWORK.md.

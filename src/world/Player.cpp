@@ -16,7 +16,12 @@ void Player::update(float sideways,float forward,bool run,float cameraYaw,float 
 bool Player::interact(Room& room) {
     if (seated()) return stand(room);
     const int index=room.nearestFreeSeat(position_);
-    if (!room.claimSeat(index)) return false;
+    return sitAt(room,index);
+}
+bool Player::sitAt(Room& room,int index) {
+    if(seated() || index<0 || index>1) return false;
+    const auto target=room.seats()[static_cast<std::size_t>(index)].position;
+    if(distanceSquared(position_,target)>=1.4F*1.4F || !room.claimSeat(index)) return false;
     returnPosition_=position_;
     const auto& s=room.seats()[static_cast<std::size_t>(index)];
     position_=s.position; yaw_=s.yaw; seat_=index;
