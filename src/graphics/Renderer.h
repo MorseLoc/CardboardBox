@@ -3,6 +3,7 @@
 #include "world/Player.h"
 #include "ui/ConnectionView.h"
 #include "cards/TabletopController.h"
+#include "club/ClubUi.h"
 #include <glm/glm.hpp>
 #include <filesystem>
 
@@ -15,9 +16,17 @@ public:
     Renderer& operator=(const Renderer&) = delete;
     void initialize(const Tabletop& table,const std::filesystem::path& cacheRoot={},const std::filesystem::path& bundledRoot={});
     void shutdown() noexcept;
+    void setClub(const ClubView* view,const ClubUi* ui,int side) {clubView_=view;clubUi_=ui;clubSide_=side;}
     void draw(int width,int height,const glm::mat4& viewProjection,
               const Room& room,const Player& player,bool paused,const Tabletop& table,const TabletopController& controls,const Player* remote=nullptr,const ConnectionView* connection=nullptr);
 private:
+    void updateFaces();
+    void drawClub(int width,int height);
+    const ClubView* clubView_=nullptr;
+    const ClubUi* clubUi_=nullptr;
+    int clubSide_=0;
+    std::array<GLuint,2> faceTextures_{};
+    std::array<Face,2> cachedFaces_;
     GLuint compile(GLenum type,const char* source);
     void mesh(const glm::mat4& vp,Shape shape,glm::vec3 position,glm::vec3 scale,
               glm::vec3 color,float rotation=0.0F);

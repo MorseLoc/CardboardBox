@@ -349,3 +349,20 @@ manual match-setup requirements. This brings work forward from the original
 phase table; it does not remove those requirements or implement them in 3B.1.
 See PHASE4_SCOPE.md for acceptance criteria. Keep toy/furniture/room painting,
 physics throws, detailed rewards, consensual ante, and final polish later.
+
+
+## Amendment 13: Phase 4 source implementation
+
+The combined shop/collection/deck/face/match milestone is implemented in Phase 4.
+SQLite on the host persists both players' copies, integer-cent balances, selected
+named decks and saved faces. Stable device IDs distinguish players. The shop
+uses the imported weighted nonbasic 11/3/1 recipe and one-cent basic-land boxes;
+new players receive 500 coins and an owned Starter deck once. Up to 16 owned-only
+decks (1–120 cards) can be edited and saved. Both Ready loads selected decks,
+shuffles and draws private opening hands. Life and mutually agreed winner/reset
+state synchronize. Faces use a shared 256-square, 16-color painter with pencil,
+eraser, brush sizes, connected-area fill, clear, undo/redo, live orb preview and
+saved/public network transfer. Profile features are in Host/Join; L preserves
+the old local sandbox. All Magic rules remain manual. Native checks passed;
+Windows and two-PC completion gates remain pending. Match rewards, ante, toys,
+physics and environmental/furniture painting remain later. See PHASE4_NOTES.md.

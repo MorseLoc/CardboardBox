@@ -114,10 +114,10 @@ void Room::releaseSeat(int i) {
     if (i>=0 && i<static_cast<int>(seats_.size())) seats_[static_cast<std::size_t>(i)].occupied=false;
 }
 std::string_view Room::nearbyStation(Vec2 p) const {
-    if (distanceSquared(p,{-6.0F,-6.7F})<3.2F) return "CARD SHOP / LAND BOXES - COMING LATER";
-    if (distanceSquared(p,{6.0F,-6.7F})<3.2F) return "DECK BUILDER - COMING LATER";
+    if (distanceSquared(p,{-6.0F,-6.7F})<3.2F) return "CARD SHOP / LAND BOXES - PRESS E";
+    if (distanceSquared(p,{6.0F,-6.7F})<3.2F) return "DECK BUILDER - PRESS E";
     if (distanceSquared(p,{-7.0F,1.2F})<2.8F) return "TOY CHEST - COMING LATER";
-    if (distanceSquared(p,{7.0F,1.3F})<2.8F) return "FACE PAINTER - COMING LATER";
+    if (distanceSquared(p,{7.0F,1.3F})<2.8F) return "FACE PAINTER - PRESS E";
     return {};
 }
 }

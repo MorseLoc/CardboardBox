@@ -1,3 +1,6 @@
+> Historical Phase 3 notes. For current Phase 4 setup, profiles, versions and
+> completion checks, use README.md and PHASE4_NOTES.md.
+
 # Phase 3B.1: shared cards and smooth pawns
 
 This extends the user's working Phase 3A source, originally based on

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <set>
+#include <stdexcept>
 #include <array>
 
 namespace fl {
@@ -37,15 +38,17 @@ std::optional<Vec2> onPlane(const Ray& ray,float y) {
 }
 Tabletop::Tabletop(std::uint32_t seed):rng_(seed) {
     definitions_=unlimitedDefinitions();
-    for (int owner=0;owner<2;++owner) {
-        const PileId id=nextPile_++;
-        CardPile p{id,owner,{-2.8F,owner==0 ? 1.7F : -1.7F},{}};
-        p.angle=owner==1 ? pi:0;
-        for(const auto def:unlimitedDemoDeck(definitions_,owner)) {
-            const CardId cid=nextCard_++;
-            CardInstance c{cid,def,owner}; c.pile=id;c.order=nextOrder_++;
-            cards_.emplace(cid,c);p.cards.push_back(cid);
-        }
+    resetDecks({unlimitedDemoDeck(definitions_,0),unlimitedDemoDeck(definitions_,1)});generation_=0;
+}
+void Tabletop::resetDecks(const std::array<std::vector<std::size_t>,2>& decks) {
+    for(const auto& deck:decks) {
+        if(deck.empty()||deck.size()>120)throw std::runtime_error("Deck must have 1 to 120 cards");
+        for(auto d:deck)if(d>=definitions_.size())throw std::runtime_error("Unknown deck card");
+    }
+    cards_.clear();piles_.clear();drag_={};nextCard_=1;nextPile_=1;nextOrder_=1;++generation_;
+    for(int owner=0;owner<2;++owner) {
+        const auto id=nextPile_++;CardPile p{id,owner,{-2.8F,owner==0?1.7F:-1.7F},{}};p.angle=owner==1?pi:0;
+        for(auto def:decks[static_cast<std::size_t>(owner)]) {const auto cid=nextCard_++;CardInstance c{cid,def,owner};c.pile=id;c.order=nextOrder_++;cards_.emplace(cid,c);p.cards.push_back(cid);}
         piles_.emplace(id,std::move(p));shuffle(id);
     }
 }
@@ -240,7 +243,7 @@ bool Tabletop::valid() const {
     return true;
 }
 TableView Tabletop::viewFor(int viewer) const {
-    TableView out;
+    TableView out;out.generation=generation_;
     // A hidden pile exposes only a count and anonymous slots, never real IDs,
     // definition indices, original copy owners, or shuffled order.
     for(const auto& [id,p]:piles_) {
@@ -272,7 +275,7 @@ TableView Tabletop::viewFor(int viewer) const {
     return out;
 }
 bool Tabletop::applyView(const TableView& view) {
-    if(view.cards.size()!=120 || view.piles.size()>122) return false;
+    if(view.cards.empty() || view.cards.size()>240 || view.piles.size()>242) return false;
     std::map<CardId,CardInstance> cards;
     std::map<PileId,CardPile> piles;
     for(const auto& c:view.cards) {
@@ -298,7 +301,7 @@ bool Tabletop::applyView(const TableView& view) {
         if(c==cards.end() || c->second.zone!=CardZone::Pile || c->second.pile!=id || !contained.insert(cid).second) return false;
     }
     for(const auto& [id,c]:cards) if(c.zone==CardZone::Pile && !contained.contains(id)) return false;
-    cards_=std::move(cards);piles_=std::move(piles);drag_.cards.clear();drag_.pile.reset();return true;
+    generation_=view.generation;cards_=std::move(cards);piles_=std::move(piles);drag_.cards.clear();drag_.pile.reset();return true;
 }
 
 }

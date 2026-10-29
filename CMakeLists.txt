@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
-project(FemboyLover VERSION 0.3.2 LANGUAGES CXX)
+project(FemboyLover VERSION 0.4.0 LANGUAGES CXX)
 
 find_package(SDL3 3.2 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(Stb REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(unofficial-enet CONFIG REQUIRED)
 
@@ -11,6 +12,7 @@ add_library(ClubhouseWorld STATIC
     src/cards/CardCatalog.cpp
     src/cards/Tabletop.cpp
     src/cards/TabletopController.cpp
+    src/club/ClubUi.cpp
     src/world/Geometry.cpp
     src/world/Room.cpp
     src/world/Player.cpp
@@ -19,8 +21,8 @@ target_compile_features(ClubhouseWorld PUBLIC cxx_std_20)
 target_include_directories(ClubhouseWorld PUBLIC src)
 set_target_properties(ClubhouseWorld PROPERTIES CXX_EXTENSIONS OFF)
 
-add_library(ClubhouseNetwork STATIC src/networking/RoomProtocol.cpp src/networking/NetworkRoom.cpp src/networking/TableProtocol.cpp src/networking/TableSession.cpp)
-target_link_libraries(ClubhouseNetwork PUBLIC ClubhouseWorld unofficial::enet::enet)
+add_library(ClubhouseNetwork STATIC src/networking/RoomProtocol.cpp src/networking/NetworkRoom.cpp src/networking/TableProtocol.cpp src/networking/TableSession.cpp src/club/Club.cpp src/club/ClubProtocol.cpp)
+target_link_libraries(ClubhouseNetwork PUBLIC ClubhouseWorld unofficial::enet::enet unofficial::sqlite3::sqlite3)
 target_compile_definitions(ClubhouseNetwork PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 set_target_properties(ClubhouseNetwork PROPERTIES CXX_EXTENSIONS OFF)
 if(WIN32)
@@ -56,12 +58,18 @@ if(WIN32)
     add_custom_command(TARGET FemboyLover POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:SDL3::SDL3> $<TARGET_FILE_DIR:FemboyLover>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:unofficial::sqlite3::sqlite3> $<TARGET_FILE_DIR:FemboyLover>
         VERBATIM)
 endif()
 
 # These headless tests exercise real movement/seating logic, not rendering.
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(ClubTests tests/ClubTests.cpp)
+    target_link_libraries(ClubTests PRIVATE ClubhouseNetwork)
+    add_test(NAME collecting-decks-faces COMMAND ClubTests)
+    set_tests_properties(collecting-decks-faces PROPERTIES TIMEOUT 60)
     add_executable(TableNetworkTests tests/TableNetworkTests.cpp)
     target_link_libraries(TableNetworkTests PRIVATE ClubhouseNetwork)
     add_test(NAME shared-table-network COMMAND TableNetworkTests)

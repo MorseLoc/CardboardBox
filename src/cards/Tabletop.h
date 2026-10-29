@@ -2,6 +2,7 @@
 #include "world/Geometry.h"
 #include "world/TableLayout.h"
 #include <cstdint>
+#include <array>
 #include <map>
 #include <limits>
 #include <optional>
@@ -43,7 +44,7 @@ struct CardPile {
     bool hidden=true,tapped=false;
 };
 inline constexpr std::size_t hiddenDefinition=std::numeric_limits<std::size_t>::max();
-struct TableView {std::vector<CardInstance> cards;std::vector<CardPile> piles;};
+struct TableView {std::uint32_t generation=0;std::vector<CardInstance> cards;std::vector<CardPile> piles;};
 struct CardDrag {
     std::vector<CardInstance> cards;
     std::optional<CardPile> pile;
@@ -83,6 +84,8 @@ public:
     bool dragged(CardId id) const;
     bool draggedPile(PileId id) const { return drag_.pile && drag_.pile->id==id; }
     bool valid() const;
+    std::uint32_t generation() const {return generation_;}
+    void resetDecks(const std::array<std::vector<std::size_t>,2>& decks);
     TableView viewFor(int viewer) const;
     bool applyView(const TableView& view); // Filtered display state, never client authority.
 private:
@@ -93,6 +96,7 @@ private:
     std::map<CardId,CardInstance> cards_;
     std::map<PileId,CardPile> piles_;
     CardDrag drag_;
+    std::uint32_t generation_=0;
     std::mt19937 rng_;
     CardId nextCard_=1;
     PileId nextPile_=1;

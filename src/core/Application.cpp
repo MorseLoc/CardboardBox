@@ -8,6 +8,8 @@
 #include <string_view>
 #include <memory>
 #include <filesystem>
+#include <fstream>
+#include <cctype>
 
 namespace fl {
 namespace {
@@ -24,7 +26,7 @@ Application::~Application() {
 }
 void Application::initialize() {
     SDL_SetMainReady(); // We supply a normal C++ main instead of SDL's wrapper.
-    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.3.2", "private.femboylover.clubhouse"), "Set metadata");
+    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.4.0", "private.femboylover.clubhouse"), "Set metadata");
     requireSdl(SDL_Init(SDL_INIT_VIDEO), "Initialize SDL3");
     sdlStarted_ = true;
     requireSdl(SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3), "Set GL major");
@@ -32,7 +34,7 @@ void Application::initialize() {
     requireSdl(SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE), "Set core profile");
     requireSdl(SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1), "Set double buffer");
     requireSdl(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24), "Set depth buffer");
-    window_ = SDL_CreateWindow("FemboyLover.exe | PHASE 3B.1 | Shared tabletop",
+    window_ = SDL_CreateWindow("FemboyLover.exe | PHASE 4 | Shared tabletop",
                                1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!window_) throw std::runtime_error(std::string{"Create window: "} + SDL_GetError());
     requireSdl(SDL_SetWindowMinimumSize(window_, 960, 600), "Set minimum window size");
@@ -52,11 +54,16 @@ void Application::initialize() {
     const std::filesystem::path basePath{std::u8string(utf8Base.begin(),utf8Base.end())};
     renderer_.initialize(table_,prefPath/"cards",basePath/"assets"/"cards");
     network_.setResumeDirectory(prefPath/"sessions");
+    std::string identity;{std::ifstream file(prefPath/"player-id.txt");file>>identity;}
+    if(identity.size()!=32 || !std::all_of(identity.begin(),identity.end(),[](unsigned char c){return std::isxdigit(c)!=0;})) {identity=newRequestId();std::ofstream file(prefPath/"player-id.txt");file<<identity;if(!file)throw std::runtime_error("Cannot save player identity");}
+    network_.configureClub(prefPath/"clubhouse.sqlite3",identity);
+    club_.send=[this](ClubCommand c){network_.clubCommand(std::move(c));};
     SDL_Log("Card cache root: %s",pref.get());
     camera_.update(0.0F, player_.position(), player_.seat(), room_, true);
     SDL_Log("WASD: move | Shift: run | RMB-drag: camera / table pan | wheel: zoom | E: sit/stand | Esc: stand/pause | Q: quit while paused");
 }
 void Application::openConnectionMenu() {
+    club_.close();
     controls_.cancel();
     controls_.setViewer(-1);
     controls_.setCommandSink({});
@@ -123,13 +130,39 @@ void Application::updateNetwork(float dt,net::MovementInput input) {
         const auto displayed=smoothers_[static_cast<std::size_t>(1-side)].update(other,state.tick,dt);
         remote_.applyNetworkState(displayed.position,displayed.yaw,other.seat);
     } else smoothers_[static_cast<std::size_t>(1-side)].reset();
-    if(network_.syncTable(table_)) controls_.refreshSelection();
+    const auto generation=table_.generation();
+    if(network_.syncTable(table_)) {if(generation!=table_.generation()){controls_.cancel();controls_.setViewer(-1);}controls_.refreshSelection();}
     connection_.tableStatus=network_.tableStatus();
     for(int i=0;i<2;++i) {
         room_.releaseSeat(i);
         for(const auto& p:state.pawns) if(p.seat==i) room_.claimSeat(i);
     }
     controls_.setViewer(network_.ready() && player_.seated()?side:-1);
+}
+void Application::showClub(ClubPage page) {
+    if(!network_.active()||!network_.ready())return;
+    controls_.cancel();club_.show(page,network_.club());
+    if(page==ClubPage::Face)club_.canvas=network_.club().faces[network_.localSide()];
+    SDL_StartTextInput(window_);paused_=false;
+}
+bool Application::clubEvent(const SDL_Event& event) {
+    if(!club_.open)return false;
+    if(event.type==SDL_EVENT_TEXT_INPUT)club_.text(event.text.text);
+    if(event.type==SDL_EVENT_KEY_DOWN&&!event.key.repeat){
+        const bool ctrl=(SDL_GetModState()&SDL_KMOD_CTRL)!=0;
+        if(event.key.key==SDLK_ESCAPE){club_.close();SDL_StopTextInput(window_);}
+        if(event.key.key==SDLK_BACKSPACE)club_.backspace();
+        if(ctrl&&event.key.key==SDLK_A&&club_.page==ClubPage::Decks){if(club_.naming)club_.name.clear();else club_.query.clear();}
+        if(ctrl&&event.key.key==SDLK_Z&&club_.page==ClubPage::Face)club_.undoPaint(false);
+        if(ctrl&&event.key.key==SDLK_S){if(club_.page==ClubPage::Face)club_.action(56,network_.club(),table_.definitions(),network_.localSide());if(club_.page==ClubPage::Decks)club_.action(41,network_.club(),table_.definitions(),network_.localSide());}
+        if(ctrl&&event.key.key==SDLK_Y&&club_.page==ClubPage::Face)club_.undoPaint(true);
+    }
+    if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN&&event.button.button==SDL_BUTTON_LEFT){pointer(event.button.x,event.button.y);club_.click(mouseX_,mouseY_,network_.club(),table_.definitions(),network_.localSide());if(!club_.open)SDL_StopTextInput(window_);}
+    if(event.type==SDL_EVENT_MOUSE_MOTION){pointer(event.motion.x,event.motion.y);club_.move(mouseX_,mouseY_);}
+    if(event.type==SDL_EVENT_MOUSE_BUTTON_UP&&event.button.button==SDL_BUTTON_LEFT)club_.up();
+    if(event.type==SDL_EVENT_MOUSE_WHEEL)club_.wheel(event.wheel.y);
+    if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST)club_.up();
+    return true;
 }
 void Application::pointer(float x,float y) {
     int w=1,h=1;
@@ -138,6 +171,7 @@ void Application::pointer(float x,float y) {
     mouseX_=x*static_cast<float>(drawableWidth_)/static_cast<float>(std::max(1,w));
     mouseY_=y*static_cast<float>(drawableHeight_)/static_cast<float>(std::max(1,h));
     controls_.setViewport(static_cast<float>(drawableWidth_),static_cast<float>(drawableHeight_));
+    club_.viewport(static_cast<float>(drawableWidth_),static_cast<float>(drawableHeight_));
 }
 std::optional<Ray> Application::pointerRay() const {
     if(!player_.seated() || drawableWidth_<=0 || drawableHeight_<=0) return {};
@@ -150,6 +184,19 @@ void Application::processEvents() {
         if(event.type==SDL_EVENT_QUIT || event.type==SDL_EVENT_WINDOW_CLOSE_REQUESTED) running_=false;
         if(event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key==SDLK_F2) {openConnectionMenu();continue;}
         if(connectionEvent(event)) continue;
+        if(clubEvent(event))continue;
+        if(event.type==SDL_EVENT_KEY_DOWN&&!event.key.repeat&&network_.ready()){
+            if(event.key.key==SDLK_F3){showClub(ClubPage::Shop);continue;}
+            if(event.key.key==SDLK_F4){showClub(ClubPage::Decks);continue;}
+            if(event.key.key==SDLK_F6){showClub(ClubPage::Face);continue;}
+            if(event.key.key==SDLK_F7){showClub(ClubPage::Match);continue;}
+            if(event.key.key==SDLK_E&&!player_.seated()&&network_.active()){
+                const auto station=room_.nearbyStation(player_.position());
+                if(station.find("CARD SHOP")!=std::string_view::npos){showClub(ClubPage::Shop);continue;}
+                if(station.find("DECK BUILDER")!=std::string_view::npos){showClub(ClubPage::Decks);continue;}
+                if(station.find("FACE PAINTER")!=std::string_view::npos){showClub(ClubPage::Face);continue;}
+            }
+        }
         if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST) {controls_.cancel();paused_=true;}
         if(event.type==SDL_EVENT_KEY_DOWN && !event.key.repeat) {
             const bool shift=(SDL_GetModState() & SDL_KMOD_SHIFT)!=0;
@@ -227,7 +274,7 @@ int Application::run() {
         const bool focused = (SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) != 0;
         const bool* keys = SDL_GetKeyboardState(nullptr);
         net::MovementInput networkInput{};
-        if (!connection_.menu && !paused_ && focused) {
+        if (!connection_.menu && !club_.open && !paused_ && focused) {
             const float sideways = static_cast<float>(keys[SDL_SCANCODE_D])-static_cast<float>(keys[SDL_SCANCODE_A]);
             const float forward = static_cast<float>(keys[SDL_SCANCODE_W])-static_cast<float>(keys[SDL_SCANCODE_S]);
             const bool run=keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
@@ -248,6 +295,8 @@ int Application::run() {
             continue;
         }
         controls_.setViewport(static_cast<float>(width),static_cast<float>(height));
+        club_.viewport(static_cast<float>(width),static_cast<float>(height));
+        renderer_.setClub(network_.active()?&network_.club():nullptr,&club_,network_.localSide());
         renderer_.draw(width,height,camera_.viewProjection(static_cast<float>(width)/static_cast<float>(height)),room_,player_,paused_,table_,controls_,haveRemote_?&remote_:nullptr,&connection_);
         requireSdl(SDL_GL_SwapWindow(window_), "Swap window buffers");
         SDL_Delay(paused_ ? 16 : 1); // Throttle pause and drivers that refuse VSync.

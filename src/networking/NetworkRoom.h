@@ -3,6 +3,7 @@
 #include "networking/TableSession.h"
 #include "networking/TableProtocol.h"
 #include "world/Player.h"
+#include "club/Club.h"
 #include <enet/enet.h>
 #include <map>
 #include <filesystem>
@@ -16,6 +17,9 @@ public:
     ~NetworkRoom();
     NetworkRoom(const NetworkRoom&)=delete;
     NetworkRoom& operator=(const NetworkRoom&)=delete;
+    void configureClub(std::filesystem::path database,std::string identity);
+    void clubCommand(ClubCommand command);
+    const ClubView& club() const {return clubView_;}
     void setResumeDirectory(std::filesystem::path directory) {resumeDirectory_=std::move(directory);}
     bool host(std::uint16_t port=defaultPort);
     bool join(const std::string& address,std::uint16_t port=defaultPort);
@@ -45,6 +49,10 @@ private:
     void publishTable();
     void applyCommand(int side,const TableCommand& command);
     void refresh();
+    void applyClub(int side,const ClubCommand& command);
+    void publishClub(int side);
+    void publishFace(int side);
+    std::string clubPlayer(int side) const;
     void seat(int side,bool standOnly);
     void loseGuest();
     bool enetStarted_=false,joined_=false,terminal_=false,reserved_=false;
@@ -72,6 +80,15 @@ private:
     std::optional<Vec2> heldPoint_;
     double moveSendTime_=0,heartbeatTime_=0;
     std::filesystem::path resumeDirectory_,resumeFile_;
+    std::filesystem::path clubFile_;
+    std::string identity_="local-host",guestIdentity_="local-guest";
+    Token identityToken_{},wireIdentity_{};
+    std::unique_ptr<ClubStore> clubStore_;
+    ClubView clubView_;
+    MatchInfo match_;
+    std::array<std::string,2> clubStatus_{"WELCOME TO YOUR CLUBHOUSE","WELCOME TO YOUR CLUBHOUSE"};
+    std::array<std::vector<std::uint16_t>,2> opened_;
+    std::map<std::string,bool> matchRequests_;
     CardResult cardResult_=CardResult::Applied;
     std::string tableStatus_="SHARED TABLE / HOST AUTHORITY";
     std::string status_="LOCAL TABLETOP";

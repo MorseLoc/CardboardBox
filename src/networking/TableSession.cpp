@@ -44,11 +44,11 @@ bool TableSession::expire(double now) {
     return changed;
 }
 CardResult TableSession::apply(int side,const TableCommand& c,bool seated,double now) {
-    if(side<0 || side>1) return CardResult::Invalid;
+    if(side<0 || side>1 || c.generation!=table.generation()) return CardResult::Invalid;
     if(c.op==CardOp::Cancel) {release(side);return CardResult::Applied;}
     if(!seated) return CardResult::NotSeated;
 
-    if(c.cards.size()>120 || std::set<CardId>(c.cards.begin(),c.cards.end()).size()!=c.cards.size() ||
+    if(c.cards.size()>240 || std::set<CardId>(c.cards.begin(),c.cards.end()).size()!=c.cards.size() ||
        !std::isfinite(c.point.x) || !std::isfinite(c.point.z) || !std::isfinite(c.rotation) ||
        std::abs(c.point.x)>layout::feltWidth/2 || std::abs(c.point.z)>layout::feltDepth/2 ||
        std::abs(c.rotation)>0.27F || (c.count!=1 && c.count!=7)) return CardResult::Invalid;

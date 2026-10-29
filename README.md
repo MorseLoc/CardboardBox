@@ -1,61 +1,95 @@
-# FemboyLover.exe — Phase 3B.1: independent card grabs and bundled artwork
+# FemboyLover.exe — Phase 4: collect, build, paint, play
 
-This patch retains Phase 3B shared cards, private hands, movement smoothing,
-and reconnects, and replaces the global drag lock with **per-object locks**. Unlimited artwork
-uses your existing cache. No new dependency is required.
+Phase 4 adds **the shop, persistent player collections, owned-card deck building,
+shared face painting, and manual match setup/results** to the working 3B.1 game.
+Independent card/pile grabs, private hands, cached/bundled Unlimited scans,
+movement smoothing, and reconnects remain included.
 
-1. Close both games. Back up your project. Copy this ZIP's **contents** into
-   the folder containing your working `CMakeLists.txt`, replacing matching files.
-2. In Visual Studio select **windows-debug**, let CMake reconfigure, then
-   **Build > Build All** and launch **FemboyLover.exe**. Both copies need this
-   same Phase 3B.1 build; older builds cannot connect to it.
-3. First window: **H**. Second window: **J**, **Ctrl+A**, `127.0.0.1`, Enter.
-   No Tailscale is needed for this same-PC test.
-4. Walk to your assigned chair with WASD and **E** to sit. **Escape** resumes
-   after switching windows if focus loss paused your input.
-5. On each side, **Shift+D** draws seven into that player's private hand.
-   Drag a hand card onto the felt. Both windows should see the same played card.
-6. Try **T** tap, **F** flip, **R / Shift+R** rotate, and right-click inspection.
-   Ctrl-click multiple loose cards, then **B** groups them. **X** splits a pile;
-   **S** shuffles the selected pile, or your library with nothing selected.
-   Shift-drop merges piles. **H** moves a selected loose card to your hand;
-   **L / Shift+L** returns it to your own library top/bottom.
-7. **F5** reconnects the guest. You may also close and reopen the guest and join
-   the **same address**: its saved resume token restores its hand/seat while the
-   host stays running. Closing/reopening the host creates a new temporary room.
-8. Repeat in **windows-release**, then between the two PCs using the host's
-   Tailscale IPv4 address. Each PC needs its own existing image cache for scans.
+## Upgrade and build
 
-The table is **20 cards wide by 10 deep**, with free placement. Both players can drag different cards or piles simultaneously. Only a grab of
-the same object, its pile members, or a conflicting mutation receives a busy
-message. Dragging is clamped to the felt. A lost/abandoned grab rolls back rather than
-losing a card. Local mode (**L** on the main menu) retains the Phase 2 controls.
+1. Close both games and back up your working project folder.
+2. Copy this ZIP's **contents** into the existing project root, beside
+   `CMakeLists.txt`, `src`, and `vcpkg.json`, replacing matching files.
+3. Open that folder in Visual Studio. Select **windows-debug** and let CMake
+   reconfigure. **SQLite3 is the one new dependency**; vcpkg installs it using
+   your existing setup. There is no separate database server to install.
+4. **Build > Build All**, select **FemboyLover.exe**, and press **F5**.
+5. Both PCs must use **Phase 4**. Host with H; join using the host's Tailscale IP.
+   For two windows on one PC, join `127.0.0.1`.
+6. Repeat the checks in windows-release once Debug works. Your image cache
+   stays compatible; this source update does not contain the actual scans.
 
-**Validation:** native shared-table and room UDP tests, card conservation,
-packet privacy/decoding, controller, movement/interpolation, collision and camera
-checks. Full Windows Debug/Release, Windows input, and WAN behavior still need
-your checks. Detailed test steps and architecture: **docs/PHASE3_NETWORK.md**.
+The new CMake target also copies the SQLite runtime beside the executable on
+Windows. This is source code, not the final ready-to-play gift package.
 
-This remains a manual tabletop with two temporary 60-card demo libraries.
-Collections, shops, deck building, disk saves of matches, rewards, ante, and
-creative tools are later phases. There is no automatic Magic rules engine.
-The next combined Phase 4 includes the shop, persistent owned collection, deck
-builder, and shared saved face painter, alongside manual match setup. See
-**docs/PHASE4_SCOPE.md** for the current scope. These are not implemented by this
-3B.1 patch. The older Phase 2 instructions below explain local controls/artwork.
+## First session
 
-## Artwork on the second PC and in the final ZIP
+- **F3: shop.** New players receive 500 fictional coins and an owned 60-card
+  Starter deck. Buy a pack for 100 coins or a basic land for 0.01 coins.
+  Pack contents appear in a list; click an entry to see its image.
+- **F4: deck builder.** Select owned cards, add/remove quantities, type to search,
+  and filter by color/rarity. Click the name field and Ctrl+A to rename. Click
+  **Save Deck**, then **Use Saved Deck**. The selected saved deck appears above.
+- **F6: face painter.** Draw on the canvas, select palette colors, use pencil,
+  eraser, brush sizes, bucket fill, clear, undo/redo, and the live orb preview.
+  **Save and Share Face** persists it and sends it to the other player.
+- **F7: match.** Both players press Ready with their selected decks. Libraries
+  are rebuilt/shuffled, each player draws up to seven private cards, and life
+  starts at 20. Close the panel, sit with E, and use the existing table controls.
+  Use F7 to change your life or vote on a winner. Both must agree on the winner.
+  Both must confirm a reset; it clears the current hands/board back to libraries.
 
-Card images are local assets, not network downloads. On the PC with scans,
-copy `%APPDATA%\FemboyLover\Clubhouse\cards\2ed` to the same per-user path on
-the second PC, then restart its game. Or run the included image downloader there.
+You can also walk to the shop, deck desk, or vanity and press **E**. Panel tabs
+switch between these screens. Escape closes a panel; Ctrl+S saves a deck/face;
+Ctrl+Z / Ctrl+Y undo/redo face paint. Stand before using a room station, or use
+the function-key shortcuts while seated. Switching windows may require Escape
+to resume local input. Networking continues while panels are open or paused.
 
-This patch also supports `<folder containing FemboyLover.exe>\assets\cards\2ed`
-for bundled JPEG/PNG scans. The renderer checks the existing cache first, then
-that executable-relative directory. The final playable ZIP can contain all
-completed scans in that directory: extract and play, with no first-run download
-or PowerShell requirement. This source ZIP does not include the scans. See
-**docs/ARTWORK_DISTRIBUTION.md**.
+**Phase 4 profiles work in Host/Join mode.** You can host alone to shop/build/paint.
+L on the main menu retains the earlier local two-chair sandbox; it does not use
+these persistent profiles. Custom decks accept 1–120 owned cards (normally use
+60 for Magic); deck legality and all Magic rules remain manual. Save up to 16
+named decks. Editing a deck does not consume copies or affect other saved decks.
+
+## Saves and reconnects
+
+The host is the canonical save location for both players' balances, owned copies,
+decks, selection, and faces. Players are recognized by their saved device ID;
+there are no external accounts. Keep using the same host for the same collection.
+The guest receives its own inventory only. Saved faces are public to both players.
+The host's database is:
+
+```text
+%APPDATA%\FemboyLover\Clubhouse\clubhouse.sqlite3
+```
+
+SQLite commits purchases and receipts together. Retried requests cannot charge
+or award twice, including after restarting the host. A clean host exit also
+writes `clubhouse-backup.sqlite3` beside the database. Keep `player-id.txt` and
+`sessions` if migrating saves. See **docs/PHASE4_NOTES.md** for backups and limits.
+Only copy the `cards` directory when transferring artwork between different PCs;
+do not clone player identities as part of an image-cache copy.
+
+A guest restart/reconnect restores its saved profile and current room state while
+the host remains open. Restarting the host preserves collections/decks/faces but
+starts a fresh temporary room/match. No purchases transfer real money.
+
+## Validation and boundaries
+
+All six native test suites passed: SQLite persistence/backups and request receipts,
+shop rarity/price/copy counts, owned-only decks, painter undo/fill, face transfer,
+custom deck setup, life/result/reset, privacy, reconnects, simultaneous grabs,
+collision, controller and camera regressions. The real OpenGL renderer produced
+all four new screens for visual checks. Full Visual Studio Debug/Release and two
+physical Windows PCs still need your verification. See **docs/PHASE4_VALIDATION.md**.
+
+Match rewards, consensual ante, throwable cards, toys, furniture building, room
+painting, and final audiovisual polish remain later work. No automatic mana,
+combat, abilities, or rules engine is introduced. Final gift packaging remains
+deferred until the gameplay is complete.
+
+The following older Phase 2 sections explain original tabletop controls and
+artwork import. The Phase 4 instructions above supersede their version/status.
 
 ---
 

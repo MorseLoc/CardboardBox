@@ -1,7 +1,8 @@
 # Phase 4: shop, decks, face painting, and match setup
 
-This is the next implementation milestone requested by the user. None of these
-new systems is implemented in Phase 3B.1. Retain the tested multiplayer foundation,
+Implemented in Phase 4 source, with native tests and offscreen rendering checks.
+Windows Debug/Release and two-PC acceptance checks remain pending.
+The earlier Phase 3B.1 update recorded the scope but did not implement it. Retain the tested multiplayer foundation,
 independent object locks, private hands, Unlimited-only pool, and 20-by-10 table.
 
 ## Persistent collecting and shop

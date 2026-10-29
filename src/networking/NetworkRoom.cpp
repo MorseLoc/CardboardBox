@@ -3,6 +3,8 @@
 #include <cmath>
 #include <random>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
 
 namespace fl::net {
 namespace {
@@ -39,18 +41,19 @@ bool NetworkRoom::host(std::uint16_t port) {
     const ENetAddress bind{ENET_HOST_ANY,port};
     transport_=enet_host_create(&bind,2,2,0,0);
     if(!transport_) {status_="HOST FAILED: UDP PORT MAY ALREADY BE IN USE";return false;}
-    transport_->maximumPacketSize=maxPacketBytes;transport_->maximumWaitingData=262144;
+    transport_->maximumPacketSize=maxPacketBytes;transport_->maximumWaitingData=2097152;
+    try {clubStore_=std::make_unique<ClubStore>(clubFile_,tableSession_.table.definitions());clubStore_->ensure(identity_,0);match_={};matchRequests_.clear();publishClub(0);} catch(const std::exception& e) {stop();status_=std::string{"SAVE ERROR: "}+e.what();return false;}
     mode_=Mode::Host;state_.pawns[0].connected=true;refresh();
-    tableDirty_=true;publishTable();
+    tableDirty_=true;publishTable();publishFace(0);
     status_="HOSTING UDP "+std::to_string(port)+" - WAITING FOR GUEST";return true;
 }
 bool NetworkRoom::join(const std::string& address,std::uint16_t port) {
     if(!start()) return false;
     if(address.empty() || address.size()>253 || enet_address_set_host(&address_,address.c_str())!=0) {status_="JOIN FAILED: INVALID HOST ADDRESS";return false;}
-    address_.port=port;loadResume(address,port);
+    address_.port=port;loadResume(address,port);wireIdentity_=identityToken_;if(address=="127.0.0.1"||address=="localhost")wireIdentity_[3]^=0x80000000U;
     transport_=enet_host_create(nullptr,1,2,0,0);
     if(!transport_) {status_="JOIN FAILED: CANNOT CREATE UDP CLIENT";return false;}
-    transport_->maximumPacketSize=maxPacketBytes;transport_->maximumWaitingData=262144;
+    transport_->maximumPacketSize=maxPacketBytes;transport_->maximumWaitingData=2097152;
     mode_=Mode::Guest;connect();return true;
 }
 void NetworkRoom::stop() {
@@ -58,7 +61,8 @@ void NetworkRoom::stop() {
         if(peer_) enet_peer_disconnect_now(peer_,0);
         enet_host_destroy(transport_);transport_=nullptr;
     }
-    pendingMove_.reset();heldPoint_.reset();peer_=nullptr;pending_.clear();joined_=false;tableReady_=false;mode_=Mode::Local;status_="LOCAL TABLETOP";
+    if(clubStore_ && !clubFile_.empty()) clubStore_->backup(clubFile_.parent_path()/"clubhouse-backup.sqlite3");
+    clubStore_.reset();pendingMove_.reset();heldPoint_.reset();peer_=nullptr;pending_.clear();joined_=false;tableReady_=false;mode_=Mode::Local;status_="LOCAL TABLETOP";
 }
 void NetworkRoom::reconnect() {
     if(mode_!=Mode::Guest || terminal_) return;
@@ -101,6 +105,11 @@ void NetworkRoom::receive(ENetPeer* from,const Message& m) {
             }
             if(peer_ && peer_!=from) enet_peer_disconnect_now(peer_,0);
             if(tableSession_.release(1)) tableDirty_=true;
+            std::ostringstream identity;identity<<std::hex;for(auto n:m.identity) identity<<std::setw(8)<<std::setfill('0')<<n;
+            auto playerId=identity.str();if(playerId==identity_)playerId+="-guest";
+            if(reserved_ && guestIdentity_!=playerId) {Message reject;reject.kind=Kind::Reject;reject.rejection=Rejection::Resume;send(from,reject,true);enet_peer_disconnect_later(from,1);return;}
+            guestIdentity_=playerId;
+            try {clubStore_->ensure(guestIdentity_,1);}catch(const std::exception& e){status_=std::string{"GUEST SAVE FAILED: "}+e.what();enet_peer_disconnect_later(from,5);return;}
             peer_=from;pending_.erase(from);
             if(!reserved_) {
                 std::random_device random;do {for(auto& n:token_) n=random();} while(emptyToken(token_));
@@ -108,9 +117,15 @@ void NetworkRoom::receive(ENetPeer* from,const Message& m) {
             }
             state_.pawns[1].connected=true;inputs_[1]={};inputTime_[1]=clock_;lastInputSequence_=0;
             Message welcome;welcome.kind=Kind::Welcome;welcome.token=token_;welcome.sequence=lastCommandSequence_;send(from,welcome,true);
-            tableDirty_=true;status_="TWO PLAYERS CONNECTED / HOST AUTHORITY";publish();publishTable();return;
+            tableDirty_=true;status_="TWO PLAYERS CONNECTED / HOST AUTHORITY";publish();publishTable();publishClub(1);publishFace(0);publishFace(1);return;
         }
         if(from!=peer_ || !state_.pawns[1].connected) return;
+        if(m.kind==Kind::ClubCommand) {
+            const auto c=decodeClubCommand(m.payload);if(!c){enet_peer_disconnect_now(from,2);loseGuest();return;}
+            if(clock_-commandWindow_>=1){commandWindow_=clock_;commandCount_=0;}
+            if(++commandCount_>180){enet_peer_disconnect_now(from,4);loseGuest();return;}
+            applyClub(1,*c);
+        }
         if(m.kind==Kind::CardCommand && m.sequence>lastCommandSequence_) {
             lastCommandSequence_=m.sequence;
             if(clock_-commandWindow_>=1) {commandWindow_=clock_;commandCount_=0;}
@@ -126,6 +141,10 @@ void NetworkRoom::receive(ENetPeer* from,const Message& m) {
         if(m.kind==Kind::Welcome) {
             token_=m.token;commandSequence_=m.sequence;saveResume();joined_=true;inputSequence_=0;state_.tick=0;receivedViewSequence_=0;status_="CONNECTED AS GUEST / HOST AUTHORITY";
         } else if(m.kind==Kind::State && joined_ && m.state.tick>=state_.tick) state_=m.state;
+        else if(m.kind==Kind::ClubState && joined_) {const auto v=decodeClubView(m.payload);if(v){const auto faces=std::move(clubView_.faces);clubView_=*v;clubView_.faces=faces;}}
+        else if(m.kind==Kind::FaceState && joined_ && m.payload.size()==facePixels+1 && m.payload[0]<2) {
+            if(std::all_of(m.payload.begin()+1,m.payload.end(),[](auto n){return n<16;}))clubView_.faces[m.payload[0]]=Face(m.payload.begin()+1,m.payload.end());
+        }
         else if(m.kind==Kind::TableState && joined_ && m.sequence>receivedViewSequence_) {
             const auto view=decodeView(m.payload);
             if(!view) {enet_peer_disconnect_now(from,2);loseGuest();return;}
@@ -167,7 +186,8 @@ void NetworkRoom::applyCommand(int side,const TableCommand& command) {
         Message reply;reply.kind=Kind::CardReply;reply.sequence=lastCommandSequence_;reply.payload={static_cast<std::uint8_t>(result)};send(peer_,reply,true);
     }
 }
-void NetworkRoom::command(const TableCommand& c) {
+void NetworkRoom::command(const TableCommand& original) {
+    auto c=original;c.generation=tableView_.generation;
     if(!active() || !ready() || !tableReady_) return;
     if(c.op==CardOp::Begin) {heldPoint_=c.point;heartbeatTime_=clock_+0.5;}
     if(c.op==CardOp::Move) {heldPoint_=c.point;pendingMove_=c;return;}
@@ -211,6 +231,61 @@ void NetworkRoom::saveResume() {
     std::ofstream file(resumeFile_,std::ios::trunc);
     if(file) for(auto n:token_) file<<n<<' ';
 }
+void NetworkRoom::configureClub(std::filesystem::path file,std::string identity) {
+    clubFile_=std::move(file);identity_=std::move(identity);
+    if(identity_.size()==32) for(int i=0;i<4;++i) identityToken_[static_cast<std::size_t>(i)]=static_cast<std::uint32_t>(std::stoull(identity_.substr(static_cast<std::size_t>(i)*8,8),nullptr,16));
+}
+std::string NetworkRoom::clubPlayer(int side) const {return side==0?identity_:guestIdentity_;}
+void NetworkRoom::publishClub(int side) {
+    if(!clubStore_) return;
+    ClubView v;v.profile=clubStore_->profile(clubPlayer(side));v.match=match_;v.status=clubStatus_[side];v.opened=opened_[side];
+    if(side==0) {auto faces=std::move(clubView_.faces);clubView_=std::move(v);clubView_.faces=std::move(faces);}
+    else if(peer_) {Message m;m.kind=Kind::ClubState;m.payload=encodeClubView(v);send(peer_,m,true);}
+}
+void NetworkRoom::publishFace(int side) {
+    if(!clubStore_) return;
+    const auto face=clubStore_->face(clubPlayer(side));clubView_.faces[side]=face;
+    if(peer_) {Message m;m.kind=Kind::FaceState;m.payload={static_cast<std::uint8_t>(side)};m.payload.insert(m.payload.end(),face.begin(),face.end());send(peer_,m,true);}
+}
+void NetworkRoom::clubCommand(ClubCommand c) {
+    if(!ready() || !active()) return;
+    if(c.request.empty())c.request=newRequestId();
+    if(mode_==Mode::Host)applyClub(0,c);
+    else {Message m;m.kind=Kind::ClubCommand;m.payload=encodeClubCommand(c);send(peer_,m,true);}
+}
+void NetworkRoom::applyClub(int side,const ClubCommand& c) {
+    if(!clubStore_)return;
+    try {
+        if(static_cast<unsigned>(c.op)<=static_cast<unsigned>(ClubOp::Face)) {
+            clubStatus_[side]=clubStore_->apply(clubPlayer(side),c,opened_[side]);
+            if(c.op==ClubOp::Face)publishFace(side);
+            if(!match_.active)match_.ready[side]=false;
+        } else if(!matchRequests_.contains(std::to_string(side)+c.request)) {
+            if(matchRequests_.size()>4096) {clubStatus_[side]="REOPEN ROOM BEFORE MORE MATCH ACTIONS";publishClub(side);return;}
+            matchRequests_[std::to_string(side)+c.request]=true;
+            if(c.op==ClubOp::Ready && !match_.active) {
+                const auto profile=clubStore_->profile(clubPlayer(side));
+                const auto deck=std::find_if(profile.decks.begin(),profile.decks.end(),[&](const auto& d){return d.name==profile.selected;});
+                if(deck==profile.decks.end())clubStatus_[side]="SELECT A SAVED DECK FIRST";
+                else {match_.ready[side]=!match_.ready[side];clubStatus_[side]="READY STATUS UPDATED";}
+                if(match_.ready[0] && match_.ready[1] && state_.pawns[1].connected) {
+                    std::array<std::vector<std::size_t>,2> lists;
+                    for(int i=0;i<2;++i){const auto p=clubStore_->profile(clubPlayer(i));const auto d=std::find_if(p.decks.begin(),p.decks.end(),[&](const auto& v){return v.name==p.selected;});if(d==p.decks.end())throw std::runtime_error("Selected deck missing");for(auto card:d->cards)lists[i].push_back(card);}
+                    tableSession_.release(0);tableSession_.release(1);tableSession_.table.resetDecks(lists);tableSession_.table.draw(1,0,7);tableSession_.table.draw(2,1,7);
+                    match_={};match_.active=true;clubStatus_={"MATCH STARTED / OPENING HANDS DRAWN","MATCH STARTED / OPENING HANDS DRAWN"};tableDirty_=true;pendingMove_.reset();heldPoint_.reset();publishTable();
+                }
+            } else if(c.op==ClubOp::Life && match_.active)match_.life[side]=std::clamp(match_.life[side]+std::clamp(c.value,-1,1),-999,999);
+            else if(c.op==ClubOp::Winner && match_.active && c.value>=0 && c.value<2) {
+                match_.votes[side]=c.value;clubStatus_[side]="WINNER VOTE RECORDED / WAITING FOR AGREEMENT";
+                if(match_.votes[0]==match_.votes[1] && match_.votes[0]>=0){match_.winner=c.value;match_.active=false;match_.ready={};clubStatus_={"RESULT AGREED / READY FOR NEXT MATCH","RESULT AGREED / READY FOR NEXT MATCH"};}
+            } else if(c.op==ClubOp::Reset && match_.active) {
+                match_.reset[side]=true;if(match_.reset[0]&&match_.reset[1]){tableSession_.release(0);tableSession_.release(1);std::array<std::vector<std::size_t>,2> lists;for(const auto& [id,card]:tableSession_.table.cards()){(void)id;lists[card.owner].push_back(card.definition);}tableSession_.table.resetDecks(lists);match_={};tableDirty_=true;pendingMove_.reset();heldPoint_.reset();publishTable();clubStatus_={"MATCH RESET BY BOTH PLAYERS","MATCH RESET BY BOTH PLAYERS"};}
+                else clubStatus_[side]="RESET REQUESTED / OTHER PLAYER MUST CONFIRM";
+            } else clubStatus_[side]="ACTION REQUIRES AN ACTIVE MATCH";
+        }
+    }catch(const std::exception& e){clubStatus_[side]=std::string{"SAVE/ACTION FAILED: "}+e.what();if(clubStatus_[side].size()>150)clubStatus_[side].resize(150);}
+    publishClub(0);if(peer_)publishClub(1);
+}
 void NetworkRoom::refresh() {
     for(std::size_t i=0;i<2;++i) {
         auto& p=state_.pawns[i];p.position=players_[i].position();p.yaw=players_[i].yaw();p.seat=players_[i].seat();
@@ -225,7 +300,7 @@ void NetworkRoom::update(float dt,MovementInput input) {
         if(event.type==ENET_EVENT_TYPE_CONNECT) {
             enet_peer_timeout(event.peer,8,3000,6000);
             if(mode_==Mode::Host) pending_[event.peer]=clock_;
-            else if(event.peer==peer_) {Message hello;hello.catalog=fingerprint_;hello.token=token_;send(peer_,hello,true);}
+            else if(event.peer==peer_) {Message hello;hello.catalog=fingerprint_;hello.token=token_;hello.identity=wireIdentity_;send(peer_,hello,true);}
         } else if(event.type==ENET_EVENT_TYPE_RECEIVE) {
             const auto m=decode({event.packet->data,event.packet->dataLength});
             if(m) receive(event.peer,*m);

@@ -18,6 +18,8 @@ private:
     void initialize();
     void processEvents();
     void openConnectionMenu();
+    void showClub(ClubPage page);
+    bool clubEvent(const SDL_Event& event);
     bool connectionEvent(const SDL_Event& event);
     void updateNetwork(float dt,net::MovementInput input);
     void pointer(float logicalX,float logicalY);
@@ -32,6 +34,7 @@ private:
     Tabletop table_;
     std::optional<Tabletop> localTable_;
     TabletopController controls_{table_};
+    ClubUi club_;
     Room room_;
     Player player_;
     Player remote_;
