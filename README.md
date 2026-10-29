@@ -1,27 +1,45 @@
-# FemboyLover.exe — Phase 3A: private room connection
+# FemboyLover.exe — Phase 3B: shared tabletop
 
-This update adds **Host / Join, two synchronized pawns, host-controlled movement
-and seating, version/content checks, and in-memory reconnection** using ENet.
-Unlimited is the only planned card set. Your existing artwork cache remains usable.
+This update adds **host-authoritative shared cards, private hands, synchronized
+piles, and smoother movement** to the working Phase 3A room. Unlimited artwork
+uses your existing cache. No new dependency is required.
 
-**This is the first Phase 3 milestone. Networked card actions are next.**
-Network rooms intentionally show an empty table; choose **L: Local Tabletop**
-to keep using all Phase 2 cards and controls.
+1. Close both games. Back up your project. Copy this ZIP's **contents** into
+   the folder containing your working `CMakeLists.txt`, replacing matching files.
+2. In Visual Studio select **windows-debug**, let CMake reconfigure, then
+   **Build > Build All** and launch **FemboyLover.exe**. Both copies need this
+   same Phase 3B build; 3A cannot connect to 3B.
+3. First window: **H**. Second window: **J**, **Ctrl+A**, `127.0.0.1`, Enter.
+   No Tailscale is needed for this same-PC test.
+4. Walk to your assigned chair with WASD and **E** to sit. **Escape** resumes
+   after switching windows if focus loss paused your input.
+5. On each side, **Shift+D** draws seven into that player's private hand.
+   Drag a hand card onto the felt. Both windows should see the same played card.
+6. Try **T** tap, **F** flip, **R / Shift+R** rotate, and right-click inspection.
+   Ctrl-click multiple loose cards, then **B** groups them. **X** splits a pile;
+   **S** shuffles the selected pile, or your library with nothing selected.
+   Shift-drop merges piles. **H** moves a selected loose card to your hand;
+   **L / Shift+L** returns it to your own library top/bottom.
+7. **F5** reconnects the guest. You may also close and reopen the guest and join
+   the **same address**: its saved resume token restores its hand/seat while the
+   host stays running. Closing/reopening the host creates a new temporary room.
+8. Repeat in **windows-release**, then between the two PCs using the host's
+   Tailscale IPv4 address. Each PC needs its own existing image cache for scans.
 
-1. Copy all update files into your current project root and let CMake install
-   the new `enet` dependency. Build All with `windows-debug`, then F5.
-2. Press **H** to host. Open a second game window, press **J**, clear the field
-   with **Ctrl+A**, type **127.0.0.1**, then Enter.
-3. Walk with WASD; each window should see pink host and blue guest. E sits at
-   your assigned chair. Escape resumes local input after switching windows.
-4. **F2** returns to the menu; **F5** on the guest reconnects without clearing
-   its in-memory token. A restarted guest needs the host to reopen the room.
-5. After the same-PC test passes, run the same build on both PCs and enter the
-   host's private Tailscale IPv4 address instead. The game listens on UDP 33445.
+The table is **20 cards wide by 10 deep**, with free placement. One active drag
+at a time is the current table-grab policy; competing actions show a busy message.
+Dragging is clamped to the felt. A lost/abandoned grab rolls back rather than
+losing a card. Local mode (**L** on the main menu) retains the Phase 2 controls.
 
-For exact build/run/test instructions, file explanations, Windows checks and
-known limitations, read **[docs/PHASE3_NETWORK.md](docs/PHASE3_NETWORK.md)**.
-The following Phase 2 documentation describes local tabletop mode.
+**Validation:** native shared-table and room UDP tests, card conservation,
+packet privacy/decoding, controller, movement/interpolation, collision and camera
+checks. Full Windows Debug/Release, Windows input, and WAN behavior still need
+your checks. Detailed test steps and architecture: **docs/PHASE3_NETWORK.md**.
+
+This remains a manual tabletop with two temporary 60-card demo libraries.
+Collections, shops, deck building, disk saves of matches, rewards, ante, and
+creative tools are later phases. There is no automatic Magic rules engine.
+The older Phase 2 instructions below still explain local controls and artwork.
 
 ---
 
@@ -80,8 +98,7 @@ launch. Live image downloads and the PowerShell script could not be executed
 in the authoring environment; this one-time step needs your Windows internet
 connection. The game makes no image requests during normal play.
 
-Only Unlimited was supplied. Beta artwork/printing variants are not added by
-this file. See **docs/UNLIMITED_IMPORT.md** for field mapping, reproducibility,
+Unlimited is the selected final pool; Beta is no longer planned. See **docs/UNLIMITED_IMPORT.md** for field mapping, reproducibility,
 image-cache details, and the Windows verification checklist.
 
 ## Version 0.2.1: empty-pile fix

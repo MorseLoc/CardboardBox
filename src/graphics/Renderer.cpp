@@ -294,19 +294,19 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
         glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(v.size()));gl_.Uniform1i(useTextureLocation_,0);
     };
     const bool networked=connection && connection->networked;
-    const bool active=player.seated() && !room.capacityPreviewEnabled() && !networked && !(connection && connection->menu);
+    const bool active=player.seated() && !room.capacityPreviewEnabled() && !(connection && connection->menu);
     const glm::vec3 dark{0.12F,0.09F,0.15F},white{0.94F,0.85F,0.80F},pink{1,0.68F,0.78F};
     panel({16*s,16*s,900*s,92*s},dark);
     panel(active?ui.handArea():UiRect{16*s,h-100*s,w-32*s,84*s},dark);
     std::vector<Vertex> text;
-    appendText(text,"FEMBOYLOVER.EXE / PHASE 3A",30*s,28*s,3*s);
-    std::string heading="20 WIDE X 10 DEEP / G: CAPACITY PREVIEW / ONE LOCAL CLIENT";
+    appendText(text,"FEMBOYLOVER.EXE / PHASE 3B",30*s,28*s,3*s);
+    std::string heading="20 WIDE X 10 DEEP / G: CAPACITY PREVIEW / LOCAL TABLETOP";
     if(room.capacityPreviewEnabled()) heading="200-SLOT CAPACITY PREVIEW / G: RETURN TO CARDS";
     if(networked) heading=connection->side==0?"NETWORK ROOM / PINK HOST / F2: MAIN MENU":"NETWORK ROOM / BLUE GUEST / F2: MAIN MENU";
     appendText(text,heading,30*s,62*s,2*s);
-    if(networked) appendText(text,connection->status.substr(0,75),30*s,84*s,1.5F*s);
+    if(networked) appendText(text,(active?connection->tableStatus:connection->status).substr(0,75),30*s,84*s,1.5F*s);
     if(active) {
-        appendText(text,controls.status().substr(0,68),30*s,84*s,1.5F*s);
+        if(!networked) appendText(text,controls.status().substr(0,68),30*s,84*s,1.5F*s);
         const auto hand=table.hand(controls.viewer());
         const auto other=table.hand(1-controls.viewer());
         const std::string counts="YOUR HAND "+std::to_string(hand.size())+" / OTHER HAND "+std::to_string(other.size())+" / WHEEL OVER HAND TO SCROLL";
@@ -331,7 +331,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
     } else {
         appendText(text,"WASD: WALK / SHIFT: RUN / RIGHT-DRAG: LOOK OR TABLE PAN / WHEEL: ZOOM",30*s,h-82*s,1.8F*s);
         appendText(text,networked?"E: YOUR SEAT / F5: RECONNECT / F2: MENU / ESC: PAUSE":"E: SIT OR STAND / HOME: RESET CAMERA / G: PREVIEW / F2: MENU / ESC: PAUSE",30*s,h-53*s,1.8F*s);
-        if(networked) appendText(text,"ROOM SYNC TEST / NETWORK CARD ACTIONS ARE THE NEXT MILESTONE",30*s,h-28*s,1.6F*s);
+        if(networked) appendText(text,"SHARED CARDS / SIT TO PLAY / HANDS ARE PRIVATE",30*s,h-28*s,1.6F*s);
         if(!player.seated() && room.nearestFreeSeat(player.position())>=0)
             appendText(text,"PRESS E TO SIT",30*s,h-138*s,3*s);
         else if(!player.seated()) {
@@ -363,7 +363,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
         const float x=std::max(12*s,(w-880*s)/2),y=std::max(12*s,(h-420*s)/2);
         panel({x,y,880*s,420*s},dark);text.clear();
         appendText(text,"FEMBOYLOVER.EXE",x+30*s,y+28*s,4*s);
-        appendText(text,"PHASE 3A / BRING YOUR OWN BOYFRIEND",x+30*s,y+78*s,2*s);
+        appendText(text,"PHASE 3B / BRING YOUR OWN BOYFRIEND",x+30*s,y+78*s,2*s);
         if(connection->editingAddress) {
             appendText(text,"HOST ADDRESS / IPV4 OR HOSTNAME / UDP 33445",x+30*s,y+145*s,2*s);
             appendText(text,connection->address.substr(connection->address.size()>45?connection->address.size()-45:0),x+30*s,y+188*s,2.5F*s);
@@ -375,7 +375,7 @@ void Renderer::drawHud(int width,int height,const glm::mat4& vp,const Room& room
             appendText(text,"SAME PC: JOIN 127.0.0.1 IN A SECOND WINDOW",x+30*s,y+282*s,2*s);
         }
         appendText(text,connection->status.substr(0,65),x+30*s,y+332*s,1.8F*s);
-        appendText(text,"ROOM SYNC ONLY / LOCAL MODE RETAINS ALL CARD CONTROLS",x+30*s,y+374*s,1.5F*s);batch(text,pink);
+        appendText(text,"HOST AUTHORITY / PRIVATE HANDS / SHARED TABLETOP",x+30*s,y+374*s,1.5F*s);batch(text,pink);
     }
     gl_.BindVertexArray(0);glEnable(GL_DEPTH_TEST);
 }
@@ -389,7 +389,7 @@ void Renderer::draw(int width,int height,const glm::mat4& vp,const Room& room,co
     if(room.capacityPreviewEnabled()) {
         for(const auto& o:room.displayCards()) mesh(vp,o.shape,{o.position.x,o.position.y,o.position.z},
             {o.size.x,o.size.y,o.size.z},{o.color.x,o.color.y,o.color.z},o.yaw);
-    } else if(!(connection && connection->networked)) drawCards(vp,table,controls,player.seated()?player.seat():-1);
+    } else drawCards(vp,table,controls,player.seated()?player.seat():-1);
     drawPawn(vp,player,connection && connection->networked && connection->side==1);
     if(remote) drawPawn(vp,*remote,connection && connection->side==0);
     drawHud(width,height,vp,room,player,paused,table,controls,connection);

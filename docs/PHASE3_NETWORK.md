@@ -1,159 +1,152 @@
-# Phase 3A: the first real connection
+# Phase 3B: shared cards and smooth pawns
 
-This milestone starts Phase 3; it does not complete networked card play.
-It is based on MorseLoc/CardboardBox master commit
-`14784fbbe9c9e17c3e93c3d979d7748821754cc8` (Added Unlimited Cards).
-The source files match that commit, with changes listed below. The unused
-Visual Studio starter files at the repository root are retained.
+This extends the user's working Phase 3A source, originally based on
+MorseLoc/CardboardBox commit `14784fbbe9c9e17c3e93c3d979d7748821754cc8`.
+The GitHub head was checked before this update; the local Phase 3A package is
+newer than that head and its room/connection features are preserved here.
+No packaging work for the second PC or later game phases is included.
 
-## What to verify before adding card replication
+## Build and run
 
-Two running copies must connect, display pink host and blue guest pawns,
-replicate movement, respect furniture and room collisions, occupy their
-assigned opposite seats, and reconnect without resetting the guest pawn.
-A third player and incompatible builds/content must be refused.
+Copy all archive contents over the working project root (beside CMakeLists.txt),
+keeping your VCPKG_ROOT environment setting. No extra dependency is introduced.
+Select windows-debug, wait for configuration, Build All, and launch
+FemboyLover.exe. Repeat with windows-release. This is a source update, not a
+precompiled Windows executable. Both players must use Phase 3B: its wire version
+and build number intentionally reject 3A peers.
 
-**Network mode synchronizes the room and seating only.** It renders an empty
-card table and disables card input. Choose L on the main menu to use every
-existing local tabletop control and your downloaded Unlimited art. A network
-room must never show independently simulated decks as if they were shared.
+Two windows on one PC: H in the first; J, Ctrl+A, `127.0.0.1`, Enter in the
+second. You can launch the second copy from Developer PowerShell:
 
-## Build in Visual Studio
+```powershell
+Start-Process .\out\build\windows-debug\FemboyLover.exe
+```
 
-1. Close the game. Back up your working folder or commit it first.
-2. Copy the complete update into the same project root as CMakeLists.txt.
-   Keep your existing VCPKG_ROOT and presets. The package has no wrapper folder.
-3. Open that folder in Visual Studio, select windows-debug, and let CMake
-   reconfigure. vcpkg now installs ENet 1.3.18 in addition to SDL3, GLM and stb.
-   This uses the same pinned baseline. No new account, service or editor is needed.
-4. Build > Build All. Select FemboyLover.exe, then F5.
-5. Repeat the build and tests with windows-release once Debug works.
+Two PCs: use the host's Tailscale IPv4 address instead. Both PCs must be on the
+same permitted private network. UDP port 33445 is unchanged; do not append a
+port to the address field. Permit the game in the relevant Windows Firewall
+profile if prompted. There is no public matchmaking or built-in relay.
 
-ENet uses the `unofficial::enet::enet` imported CMake target. Its vcpkg port
-builds a static library; this change does not add an ENet DLL to distribute.
-Windows system socket/timer libraries ws2_32 and winmm are linked explicitly.
-SDL3.dll is still copied beside the executable. These are source files, not
-a precompiled Windows release.
+Switching windows pauses the window that loses focus; Escape resumes it.
+The host continues networking while paused or minimized. F2 leaves the room;
+Q exits from the menu or pause screen. L on the menu starts local tabletop mode.
 
-Run the checks through Test Explorer or Developer PowerShell:
+## Completion checklist: run on both Debug and Release
+
+1. Connect and walk both pawns. Look at the guest's own movement and the other
+   pawn in both windows. They should animate between updates rather than jump
+   at the 20 Hz snapshot rate. Some input delay remains on the guest.
+2. Approach your assigned chair and E to sit: pink host on one long edge, blue
+   guest on the other. Attempting to sit from far away must fail.
+3. Shift+D in each window. Your hand should have seven readable cards, the other
+   hand only a count. Opponent hand contents are absent from the incoming view.
+4. Drag one hand card onto the felt. Both windows must show it in the same
+   position; the playing hand count drops by one. Try both players in turn.
+5. Select it and test T twice, F twice, R, and Shift+R. Right-click a face-up
+   card to inspect it. A face-down card must not reveal its front by inspection.
+6. Play another card, Ctrl-click both, then B. A public pile should appear.
+   Right-click or Shift-right-click to inspect/browse or open the actions menu.
+   X splits a multi-card pile. Select and S to shuffle. Shift-drop a pile onto
+   another to merge. Drawing the last card deletes a player-made pile.
+7. H moves selected loose cards into your hand; L returns them to your library
+   top, Shift+L to its bottom. Double-click your library to draw one. A hidden
+   opponent pile cannot be drawn/revealed/shuffled/manipulated by your client.
+8. Have one player hold a card. A second player's conflicting operation must
+   receive TABLE BUSY. Release before the second player retries. This build
+   serializes all grabs: independent simultaneous drags are not implemented.
+9. Cancel a drag with Escape/right-click, change focus, or disconnect the guest
+   while dragging. The card must return to its original hand/position without
+   duplication. A stationary held grab stays alive via heartbeat packets.
+10. Press F5 in the guest: its hand, piles, pawn and seat should recover. Close
+    only the guest, reopen it, and join the same address. It should resume the
+    reserved seat/hand and still accept new card commands. Keep the host open.
+11. Try a third player or a 3A build. The existing guest must stay connected.
+12. Repeat on the two real Windows PCs, including Tailscale disconnection/recovery.
+
+Both PCs load scans from their own `%APPDATA%\FemboyLover\Clubhouse\cards`
+cache. No artwork crosses the game connection. Your completed download does not
+need to be repeated on this PC. Missing artwork keeps the readable fallback.
+
+## Files and responsibilities
+
+- `TableCommand.h`: explicit card requests without definitions or client state.
+- `TableSession`: the host's authoritative Tabletop, permission checks, one
+  manipulation lease, bounds checks, cancellation, and lease expiry.
+- `TableProtocol`: bounded, explicit little-endian command/view serialization;
+  finite-float checks and rejection of truncated or trailing payloads.
+- `Tabletop::viewFor`: recipient filtering. Hidden libraries/piles contain
+  anonymous placeholders, not original instance IDs or their shuffled order.
+  The other player's hand also has only anonymous cards. Definitions are sent
+  only for that viewer's hand or revealed public cards. Display snapshots are
+  validated before replacing the client's view.
+- `NetworkRoom`: reliable ordered commands, monotonic deduplication, host
+  replies, reliable filtered table snapshots, 20 Hz coalesced drag movement,
+  movement updates on the separate unreliable channel, and reconnection.
+- `TabletopController`: existing controls route network mutations to the host;
+  local mode still uses the original Tabletop methods. Inspection stays local
+  and can only display identities in the filtered view.
+- `PawnSmoother`: 75 ms display interpolation, including the guest's own pawn.
+  Seat transitions, teleports and reconnects snap; authoritative collisions are
+  unchanged. No prediction/reconciliation is attempted in this milestone.
+- `Application` / `Renderer`: shared table rendering, private hand UI, busy
+  feedback, and continuous network servicing while paused.
+
+The host generates shuffles. It serializes both players' card requests, rejects
+requests from unseated players, rejects private-zone access, and suppresses
+repeated command sequence numbers. The current board has 120 physical copies
+in two 60-card demo libraries. Player-made empty piles disappear; original empty
+library anchors remain available internally for returns.
+
+Drag movement is sent at most 20 times a second; stationary holds renew twice a
+second. A lease expires after three seconds without a renewal. Standing or
+losing the guest connection cancels its active drag. A grab cancel rolls back
+the original physical state; atomic completed actions are never rolled back
+merely because their sender disconnects. Updated recipient views are sent only
+when the table changes, at up to 20 Hz, plus the initial/reconnect snapshot.
+The packet size cap is 32 KiB; snapshots stay below that cap. Commands have a
+rate bound and fixed maximum selection length. Stale movement input expires.
+
+Resume tokens are saved under `%APPDATA%\FemboyLover\Clubhouse\sessions`, keyed
+by host address and port. Use the same address when reopening the guest. The
+welcome includes the last processed command sequence so a restarted client
+continues without replaying old draws. An old token for a newly reopened host
+is cleared and retried once; it cannot claim somebody else's reserved room.
+Closing the host ends this temporary session. This is not a permanent player
+identity, account system, or disk save of a match.
+
+The host necessarily knows all authoritative cards. Privacy protects the guest's
+view from receiving opponent identities; it cannot hide cards from the host
+process. ENet does not encrypt; the intended private Tailscale connection supplies
+the private route. Do not expose this prototype as a public server.
+
+## Automated checks and remaining platform checks
 
 ```powershell
 ctest --test-dir .\out\build\windows-debug --output-on-failure
 ctest --test-dir .\out\build\windows-release --output-on-failure
 ```
 
-## First: two windows on one PC
+`TableNetworkTests` exercises filtered packet privacy, hidden shuffle anonymity,
+round trips, malformed/truncated views, permission rejection, draw/return counts,
+play/reveal/tap/flip/rotate, group/split/merge/shuffle, empty piles, grab exclusion,
+lease expiry, network controller hand dragging, pawn interpolation, actual UDP
+shared cards, repeated-request deduplication, reconnect rollback, guest-process
+restart, and fresh-host token recovery. Existing Network/Room/Card/Camera tests
+remain. Native source checks and offscreen OpenGL exercise the real renderer.
 
-Launch the first copy, press H to host. Then open a second copy, for example:
+Visual Studio/vcpkg Debug and Release, a real SDL Windows input loop, Windows
+Firewall, VPN interruptions, two real PCs, and WAN jitter still need your tests.
+Headless tests do not certify those platform behaviors.
 
-```powershell
-Start-Process .\out\build\windows-debug\FemboyLover.exe
-```
+## Boundaries and next phase
 
-In the second window, press J, use Ctrl+A to clear the address, type
-`127.0.0.1`, then Enter. Ctrl+V pastes an IPv4 address or hostname, replacing
-the field. Escape backs out of address entry. UDP port 33445 is fixed in this
-milestone; do not append `:33445` to the address.
+One active tabletop drag is supported at a time. Other actions receive a busy
+reply instead of being queued invisibly. Cards follow authoritative snapshots;
+there is no client-side card prediction yet. UI pile selection may need a new
+click after another player splits/merges/removes that pile. This is a manual
+sandbox: card abilities, mana and outcomes are not interpreted automatically.
 
-Both windows should show two pawns and a connected status. Pink is host/player
-one; blue is guest/player two. They spawn on opposite sides of the room.
-WASD moves; Shift runs; right-drag changes the camera. Movement is calculated
-by the host. The other pawn is smoothed for display. The local guest pawn uses
-host snapshots directly, so a small input delay is expected.
-
-Walk up to your own chair and E to sit. Each network player is assigned their
-own seat, pink on the positive-Z side and blue on the negative-Z side. E or
-Escape stands. Sitting does not start a card match in Phase 3A.
-
-Switching windows pauses local input; press Escape to resume. The host keeps
-servicing the guest even when the host is paused or minimized. F2 leaves the
-room and returns to the main menu. Q quits from that menu or while paused.
-L starts the unchanged local card-table mode, with your existing cached art.
-
-## Then: two Windows PCs
-
-Both machines need this same build and card definitions. On your existing
-private Tailscale network, the host presses H. The guest presses J and enters
-the host PC's Tailscale IPv4 address. The game uses ordinary ENet UDP sockets;
-Tailscale provides the network route without a special game-side integration.
-A LAN IPv4 address also works if both PCs are on the same LAN. There is no
-room-code, discovery server, NAT traversal service, or relay built into the game.
-
-If Windows Firewall asks, permit the executable on the network profile used
-for this private connection. A blocked UDP 33445 rule, an unreachable address,
-or a Tailscale access policy can prevent joining. Run the same-PC test first
-to separate application problems from routing/firewall problems. No router
-port forwarding is required for the intended Tailscale connection.
-
-Each PC loads artwork from its own existing preference cache. Room networking
-does not download, copy, or transmit image files. Your current caching job can
-finish normally. The downloader default-manifest-path bug is also fixed here;
-its earlier explicit-path command remains valid.
-
-## Reconnection and boundaries
-
-A temporary disconnection freezes the guest's input and triggers automatic
-retries. F5 on the guest requests a reconnect using the same in-memory resume
-token. The host retains pawn position and seat while the room remains open.
-The disconnected seat stays reserved for that guest. No match result or reward
-is inferred from disconnection.
-
-A guest process restart loses its in-memory token. The host must use F2 and H
-to create a fresh room before a restarted guest can join. Closing the host also
-ends the room. This build has no persistent room save, collection database,
-accounts or economy. Never treat this room token as a permanent player ID.
-
-ENet itself does not encrypt packets. This private prototype relies on the
-chosen private network and an honest host. Resume tokens prevent accidental
-slot takeover; they are not an Internet authentication system.
-
-## Files and concepts
-
-- `src/networking/RoomProtocol.h/.cpp`: bounded binary messages, explicit little
-  endian serialization, finite numeric checks, protocol/build versions, and a
-  stable fingerprint of all public card-definition data. PNG/JPEG cache files
-  are excluded from the fingerprint so a missing image does not block joining.
-- `src/networking/NetworkRoom.h/.cpp`: RAII ownership of ENet resources; a
-  nonblocking event pump; host-side 60 Hz simulation; 20 Hz movement/snapshot
-  messages; reliable handshakes/seating; session token and reconnect handling.
-- `src/world/Player.h/.cpp`: explicit seat choice with distance and occupancy
-  validation; application of an already validated host state for rendering.
-- `src/ui/ConnectionView.h`: simple presentation data for the menu and status.
-- `Application`: input/menu integration; networking continues while paused;
-  guest sends directional inputs instead of assigning its world position.
-- `Renderer`: second pawn, distinguishing body colors, menu/status rendering,
-  and an explicit room-only network view.
-- `tests/NetworkTests.cpp`: strict decoding plus actual ENet UDP loopback.
-
-The reliable channel carries handshake and seat requests. The separate
-unreliable sequenced channel carries replaceable movement and snapshots, so
-outdated motion does not accumulate behind reliable retransmissions. Stale
-guest input expires after 0.3 seconds. Packet sizes and waiting data are bounded;
-packet structs are never serialized by copying their compiler-dependent memory.
-
-The host maintains Room and Player simulation state independently of graphics.
-Rendering interpolates the remote pawn, not the collision simulation. Its
-authoritative positions include room/furniture collision and pawn separation.
-
-## Validation and limits
-
-Native tests exercise real ENet 1.3.18 UDP sockets, handshake rejection for
-wrong build and card content, player assignment, host-applied guest movement,
-wall collision, an occupied room, reserved-slot reconnect, seat-distance checks,
-and guest stand requests. Room regression tests cover the existing collision
-and seating behavior. Strict native compiler checks cover changed application
-and rendering code. An offscreen OpenGL render checks the menu and second pawn.
-
-The authoring environment is not Windows: Visual Studio/vcpkg Debug and Release,
-Windows firewall behavior, two physical PCs, WAN latency, VPN interruptions and
-suspend/resume still require testing on your machines. A live Windows SDL window
-and input loop cannot be certified by the headless rendering test.
-
-## Next: Phase 3B
-
-Once these connection checks pass, add host-authoritative card requests,
-per-card manipulation leases, public/owner-specific snapshots, and packet-level
-privacy tests. A guest must start from a filtered view, never from a complete
-authoritative Tabletop disguised with card-back textures. Integrate draw,
-shuffle, drag, rotate, tap, flip and pile operations through that boundary.
-Collections, rewards and ante remain later milestones.
+No shop, collection ownership, economy, deck builder, persistent match save,
+rewards, ante, toy physics, face painter, or room painting has been added. The
+next milestone is the shop/collection foundation using the Unlimited catalog,
+including one-cent basic-land purchases and the recorded booster recipe.

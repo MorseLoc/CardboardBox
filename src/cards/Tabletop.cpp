@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <set>
+#include <array>
 
 namespace fl {
 namespace {
@@ -63,7 +64,7 @@ PileId Tabletop::library(int viewer) const {
     return pile(id) ? id : 0;
 }
 std::optional<std::size_t> Tabletop::visibleDefinition(CardId id,int viewer) const {
-    const auto* c=card(id);if (!c) return {};
+    const auto* c=card(id);if (!c || c->definition>=definitions_.size()) return {};
     if (c->zone==CardZone::Hand) return viewer==c->handOwner ? std::optional{c->definition}:std::nullopt;
     if (c->zone==CardZone::Pile) { const auto* p=pile(c->pile);if (!p || p->hidden) return {}; }
     return c->faceUp ? std::optional{c->definition}:std::nullopt;
@@ -227,10 +228,72 @@ bool Tabletop::valid() const {
         if(!c || c->zone!=CardZone::Pile || c->pile!=id || !contained.insert(cid).second) return false;
     }
     for(const auto& [id,c]:cards_) {
-        if(c.id!=id || c.definition>=definitions_.size()) return false;
+        if(c.id!=id || (c.definition!=hiddenDefinition && c.definition>=definitions_.size())) return false;
         if(c.zone==CardZone::Pile && !contained.contains(id)) return false;
         if(c.zone==CardZone::Hand && (c.handOwner<0 || c.handOwner>1)) return false;
     }
     return true;
 }
+TableView Tabletop::viewFor(int viewer) const {
+    TableView out;
+    // A hidden pile exposes only a count and anonymous slots, never real IDs,
+    // definition indices, original copy owners, or shuffled order.
+    for(const auto& [id,p]:piles_) {
+        auto visible=p;
+        if(p.hidden) {
+            visible.cards.clear();
+            for(std::size_t i=0;i<p.cards.size();++i) {
+                const CardId alias=0x80000000U+id*256U+static_cast<CardId>(i);
+                CardInstance c{alias,hiddenDefinition,p.owner};c.pile=id;
+                out.cards.push_back(c);visible.cards.push_back(alias);
+            }
+        }
+        out.piles.push_back(std::move(visible));
+    }
+    std::array<unsigned,2> handSlots{};
+    for(const auto& [id,c]:cards_) {
+        if(c.zone==CardZone::Pile && pile(c.pile)->hidden) continue;
+        if(c.zone==CardZone::Hand && c.handOwner!=viewer) {
+            const CardId alias=0xf0000000U+static_cast<unsigned>(c.handOwner)*256U+handSlots[static_cast<std::size_t>(c.handOwner)]++;
+            CardInstance anonymous{alias,hiddenDefinition,c.handOwner};
+            anonymous.zone=CardZone::Hand;anonymous.handOwner=c.handOwner;
+            out.cards.push_back(anonymous);
+        } else {
+            auto visible=c;
+            if(!visibleDefinition(id,viewer)) visible.definition=hiddenDefinition;
+            out.cards.push_back(visible);
+        }
+    }
+    return out;
+}
+bool Tabletop::applyView(const TableView& view) {
+    if(view.cards.size()!=120 || view.piles.size()>122) return false;
+    std::map<CardId,CardInstance> cards;
+    std::map<PileId,CardPile> piles;
+    for(const auto& c:view.cards) {
+        if(!c.id || c.owner<0 || c.owner>1 ||
+           (c.definition!=hiddenDefinition && c.definition>=definitions_.size()) ||
+           !std::isfinite(c.position.x) || !std::isfinite(c.position.z) ||
+           !std::isfinite(c.angle) || !std::isfinite(c.height) ||
+           std::abs(c.position.x)>20 || std::abs(c.position.z)>20 || c.height<1 || c.height>3 ||
+           (c.zone!=CardZone::Table && c.zone!=CardZone::Hand && c.zone!=CardZone::Pile) ||
+           (c.zone==CardZone::Hand && (c.handOwner<0 || c.handOwner>1)) ||
+           !cards.emplace(c.id,c).second) return false;
+    }
+    for(const auto& p:view.piles) {
+        if(!p.id || p.id>1000000 || p.owner<0 || p.owner>1 ||
+           !std::isfinite(p.position.x) || !std::isfinite(p.position.z) || !std::isfinite(p.angle) ||
+           std::abs(p.position.x)>20 || std::abs(p.position.z)>20 || (p.id>2 && p.cards.empty()) ||
+           !piles.emplace(p.id,p).second) return false;
+    }
+    if(!piles.contains(1) || !piles.contains(2)) return false;
+    std::set<CardId> contained;
+    for(const auto& [id,p]:piles) for(auto cid:p.cards) {
+        const auto c=cards.find(cid);
+        if(c==cards.end() || c->second.zone!=CardZone::Pile || c->second.pile!=id || !contained.insert(cid).second) return false;
+    }
+    for(const auto& [id,c]:cards) if(c.zone==CardZone::Pile && !contained.contains(id)) return false;
+    cards_=std::move(cards);piles_=std::move(piles);dragCards_.clear();dragPile_.reset();return true;
+}
+
 }

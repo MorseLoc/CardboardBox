@@ -9,6 +9,17 @@ void TabletopController::setViewer(int viewer) {
     if(viewer_==viewer) return;
     cancel();clearSelection();handOffset_=0;viewer_=viewer;
 }
+void TabletopController::refreshSelection() {
+    selectedPile_=selectedPile();
+    std::erase_if(selected_,[&](CardId id){const auto* c=table_.card(id);return !c || (c->zone==CardZone::Hand && c->handOwner!=viewer_);});
+    if(!selected_.empty()) {
+        const auto* first=table_.card(selected_.front());
+        if(first->zone==CardZone::Pile && std::all_of(selected_.begin(),selected_.end(),[&](CardId id){return table_.card(id)->pile==first->pile;})) {
+            selectedPile_=first->pile;selected_.clear();
+        }
+    }
+    handOffset_=std::clamp(handOffset_,0,std::max(0,static_cast<int>(table_.hand(viewer_).size())-TableUiLayout{width_,height_}.handSlots()));
+}
 CardId TabletopController::handHit(float x,float y) const {
     const TableUiLayout ui{width_,height_};const auto hand=table_.hand(viewer_);
     for(int i=0;i<ui.handSlots();++i) {
@@ -22,9 +33,16 @@ void TabletopController::pointerMove(float x,float y,std::optional<Ray> ray) {
     const TableUiLayout ui{width_,height_};
     if(ui.handArea().contains(x,y)) return;
     if(!startedDrag_ && std::hypot(x-pressX_,y-pressY_)>5.0F) {
-        startedDrag_=table_.beginDrag(selected_,selectedPile_,pressAnchor_);
+        if(sink_) {TableCommand c;c.op=CardOp::Begin;c.cards=selected_;c.pile=selectedPile_;c.point=pressAnchor_;
+            if(!selected_.empty()) if(const auto* card=table_.card(selected_.front());card && card->zone==CardZone::Hand) c.point=onPlane(*ray,layout::cardCenterY).value_or(Vec2{});
+            c.point={std::clamp(c.point.x,-layout::feltWidth/2+layout::cardDepth,layout::feltWidth/2-layout::cardDepth),std::clamp(c.point.z,-layout::feltDepth/2+layout::cardDepth,layout::feltDepth/2-layout::cardDepth)};
+            sink_(c);startedDrag_=true;}
+        else startedDrag_=table_.beginDrag(selected_,selectedPile_,pressAnchor_);
     }
-    if(startedDrag_) if(auto point=onPlane(*ray,layout::cardCenterY)) table_.moveDrag(*point);
+    if(startedDrag_) if(auto point=onPlane(*ray,layout::cardCenterY)) {
+        if(sink_) {TableCommand c;c.op=CardOp::Move;c.point={std::clamp(point->x,-layout::feltWidth/2+layout::cardDepth,layout::feltWidth/2-layout::cardDepth),std::clamp(point->z,-layout::feltDepth/2+layout::cardDepth,layout::feltDepth/2-layout::cardDepth)};sink_(c);}
+        else table_.moveDrag(*point);
+    }
 }
 void TabletopController::leftDown(float x,float y,std::optional<Ray> ray,bool control,bool doubleClick) {
     if(viewer_<0) return;
@@ -50,7 +68,7 @@ void TabletopController::leftDown(float x,float y,std::optional<Ray> ray,bool co
     } else if(control) {
         selectedPile_=0;
         // Keep hand and tabletop selections separate for predictable group drags.
-        if(!selected_.empty() && table_.card(selected_.front())->zone!=table_.card(hit.card)->zone) selected_.clear();
+        if(!selected_.empty() && (!table_.card(selected_.front()) || table_.card(selected_.front())->zone!=table_.card(hit.card)->zone)) selected_.clear();
         if(selected(hit.card)) selected_.erase(std::remove(selected_.begin(),selected_.end(),hit.card),selected_.end());
         else selected_.push_back(hit.card);
         return;
@@ -64,18 +82,22 @@ void TabletopController::leftUp(float x,float y,std::optional<Ray> ray,bool merg
         if(TableUiLayout{width_,height_}.handArea().contains(x,y)) {
             // Dropping above the hand bar cancels the motion, then explicitly
             // moves loose selections into the active viewer's hidden hand.
-            table_.cancelDrag();
-            if(!selected_.empty()) table_.toHand(selected_,viewer_);
+            cancelMotion();
+            if(!selected_.empty()) {
+                if(sink_) {TableCommand c;c.op=CardOp::Hand;c.cards=selected_;sink_(c);}
+                else table_.toHand(selected_,viewer_);
+            }
         } else {
             const auto target=(merge && ray) ? table_.pick(*ray,true).pile:0;
-            table_.finishDrag(target);
+            if(sink_) {TableCommand c;c.op=CardOp::Finish;c.target=target==selectedPile_?0:target;sink_(c);}
+            else table_.finishDrag(target);
         }
     }
     pressed_=false;startedDrag_=false;
 }
 void TabletopController::rightDown(float x,float y,std::optional<Ray> ray,bool menu) {
     if(inspectionOpen()) {inspectCard_=0;inspectPile_=0;return;}
-    if(table_.dragging()) {table_.cancelDrag();pressed_=false;startedDrag_=false;return;}
+    if(dragging()) {cancelMotion();pressed_=false;startedDrag_=false;return;}
     const CardId ownHand=handHit(x,y);
     if(!ownHand && TableUiLayout{width_,height_}.handArea().contains(x,y)) return;
     const auto hit=ownHand ? TableHit{ownHand,0,{}} : (ray ? table_.pick(*ray):TableHit{});
@@ -143,10 +165,26 @@ bool TabletopController::wheel(float amount,float x,float y) {
     return menuOpen_;
 }
 void TabletopController::action(TableAction action) {
-    if(viewer_<0 || inspectionOpen() || table_.dragging()) return;
+    if(viewer_<0 || inspectionOpen() || dragging()) return;
     menuOpen_=false;pressed_=false;
     selectedPile_=selectedPile();
     const auto target=selectedPile_ ? selectedPile_:table_.library(viewer_);
+    if(sink_) {
+        TableCommand c;c.cards=selected_;c.pile=selectedPile_;
+        switch(action) {
+        case TableAction::Tap:c.op=CardOp::Tap;break;
+        case TableAction::Flip:c.op=CardOp::Flip;break;
+        case TableAction::RotateLeft:case TableAction::RotateRight:c.op=CardOp::Rotate;c.rotation=action==TableAction::RotateLeft?-0.261799388F:0.261799388F;break;
+        case TableAction::Draw:case TableAction::DrawSeven:c.op=CardOp::Draw;c.cards.clear();c.pile=target;c.count=action==TableAction::Draw?1:7;break;
+        case TableAction::Shuffle:c.op=CardOp::Shuffle;c.cards.clear();c.pile=target;break;
+        case TableAction::Group:c.op=CardOp::Group;break;
+        case TableAction::Split:c.op=CardOp::Split;break;
+        case TableAction::Hand:c.op=CardOp::Hand;break;
+        case TableAction::Top:case TableAction::Bottom:c.op=CardOp::Return;c.pile=0;c.bottom=action==TableAction::Bottom;break;
+        case TableAction::Center:c.op=CardOp::Center;break;
+        }
+        sink_(c);status_="REQUEST SENT TO HOST";return;
+    }
     switch(action) {
     case TableAction::Tap: table_.tap(selected_,selectedPile_);break;
     case TableAction::Flip: table_.flip(selected_,selectedPile_);break;
@@ -170,10 +208,14 @@ void TabletopController::action(TableAction action) {
     handOffset_=std::clamp(handOffset_,0,std::max(0,static_cast<int>(table_.hand(viewer_).size())-TableUiLayout{width_,height_}.handSlots()));
 }
 bool TabletopController::escape() {
-    if(table_.dragging() || pressed_) {table_.cancelDrag();pressed_=false;startedDrag_=false;return true;}
+    if(dragging() || pressed_) {cancelMotion();pressed_=false;startedDrag_=false;return true;}
     if(inspectionOpen()) {inspectCard_=0;inspectPile_=0;return true;}
     if(menuOpen_) {menuOpen_=false;return true;}
     return false;
 }
-void TabletopController::cancel() {table_.cancelDrag();pressed_=false;startedDrag_=false;menuOpen_=false;inspectCard_=0;inspectPile_=0;}
+void TabletopController::cancelMotion() {
+    if(sink_) {if(startedDrag_) {TableCommand c;c.op=CardOp::Cancel;sink_(c);}}
+    else table_.cancelDrag();
+}
+void TabletopController::cancel() {cancelMotion();pressed_=false;startedDrag_=false;menuOpen_=false;inspectCard_=0;inspectPile_=0;}
 }

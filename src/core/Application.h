@@ -4,6 +4,7 @@
 #include "world/Player.h"
 #include <SDL3/SDL.h>
 #include "networking/NetworkRoom.h"
+#include "networking/PawnSmoother.h"
 
 namespace fl {
 class Application {
@@ -29,6 +30,7 @@ private:
     float mouseX_=0,mouseY_=0;
     int drawableWidth_=1280,drawableHeight_=720;
     Tabletop table_;
+    std::optional<Tabletop> localTable_;
     TabletopController controls_{table_};
     Room room_;
     Player player_;
@@ -36,6 +38,7 @@ private:
     net::NetworkRoom network_;
     ConnectionView connection_;
     bool haveRemote_=false;
+    std::array<net::PawnSmoother,2> smoothers_;
     Camera camera_;
     Renderer renderer_;
 };

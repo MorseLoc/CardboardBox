@@ -3,6 +3,7 @@
 #include "world/TableLayout.h"
 #include <cstdint>
 #include <map>
+#include <limits>
 #include <optional>
 #include <random>
 #include <span>
@@ -41,6 +42,8 @@ struct CardPile {
     float angle=0;
     bool hidden=true,tapped=false;
 };
+inline constexpr std::size_t hiddenDefinition=std::numeric_limits<std::size_t>::max();
+struct TableView {std::vector<CardInstance> cards;std::vector<CardPile> piles;};
 struct TableHit { CardId card=0; PileId pile=0; Vec2 point{}; };
 class Tabletop {
 public:
@@ -71,6 +74,8 @@ public:
     bool dragged(CardId id) const;
     bool draggedPile(PileId id) const { return dragPile_ && dragPile_->id==id; }
     bool valid() const;
+    TableView viewFor(int viewer) const;
+    bool applyView(const TableView& view); // Filtered display state, never client authority.
 private:
     void detach(CardId id);
     void removeEmptyPiles();

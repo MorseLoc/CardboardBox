@@ -1,5 +1,7 @@
 #pragma once
 #include "cards/Tabletop.h"
+#include "cards/TableCommand.h"
+#include <functional>
 #include <string_view>
 
 namespace fl {
@@ -17,8 +19,11 @@ enum class TableAction { Tap,Flip,RotateLeft,RotateRight,Draw,DrawSeven,Shuffle,
 class TabletopController {
 public:
     explicit TabletopController(Tabletop& table):table_(table) {}
+    void setCommandSink(std::function<void(const TableCommand&)> sink) {sink_=std::move(sink);}
+    bool dragging() const {return startedDrag_ || table_.dragging();}
     void setViewport(float width,float height) {width_=width;height_=height;}
     void setViewer(int viewer);
+    void refreshSelection();
     void pointerMove(float x,float y,std::optional<Ray> ray);
     void leftDown(float x,float y,std::optional<Ray> ray,bool control,bool doubleClick);
     void leftUp(float x,float y,std::optional<Ray> ray,bool merge);
@@ -46,6 +51,8 @@ private:
     void inspect();
     void clearSelection();
     void invokeMenu(int row);
+    void cancelMotion();
+    std::function<void(const TableCommand&)> sink_;
     Tabletop& table_;
     int viewer_=-1,handOffset_=0,inspectIndex_=0;
     std::vector<CardId> selected_;

@@ -318,3 +318,15 @@ The user clarified that Beta need not be imported: Unlimited is the selected
 card pool. Phase 3 is delivered incrementally. The first room-connection build
 retains local tabletop mode and exposes network cards only after an authoritative,
 privacy-filtered card protocol is implemented and tested. See PHASE3_NETWORK.md.
+
+
+## Amendment 11: Phase 3B shared tabletop and smoothing
+
+The user verified 3A connectivity and requested a fix for choppy second-player
+movement together with 3B. Network cards now use host authority and per-view
+privacy filtering, including anonymous hidden-pile slots. The guest's own pawn
+also interpolates snapshots. One temporary table-grab lease serializes drags;
+completed card actions are reliable and deduplicated. A restarted guest can
+resume while the same host remains open. Collections/economy and final packaging
+remain later milestones. Keep Unlimited as the only card pool and the table
+20 cards wide by 10 deep. See PHASE3_NETWORK.md for exact limits and checks.

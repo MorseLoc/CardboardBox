@@ -24,7 +24,7 @@ Application::~Application() {
 }
 void Application::initialize() {
     SDL_SetMainReady(); // We supply a normal C++ main instead of SDL's wrapper.
-    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.3.0", "private.femboylover.clubhouse"), "Set metadata");
+    requireSdl(SDL_SetAppMetadata("FemboyLover.exe", "0.3.1", "private.femboylover.clubhouse"), "Set metadata");
     requireSdl(SDL_Init(SDL_INIT_VIDEO), "Initialize SDL3");
     sdlStarted_ = true;
     requireSdl(SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3), "Set GL major");
@@ -32,7 +32,7 @@ void Application::initialize() {
     requireSdl(SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE), "Set core profile");
     requireSdl(SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1), "Set double buffer");
     requireSdl(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24), "Set depth buffer");
-    window_ = SDL_CreateWindow("FemboyLover.exe | PHASE 3A | Private room connection test",
+    window_ = SDL_CreateWindow("FemboyLover.exe | PHASE 3B | Shared tabletop",
                                1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!window_) throw std::runtime_error(std::string{"Create window: "} + SDL_GetError());
     requireSdl(SDL_SetWindowMinimumSize(window_, 960, 600), "Set minimum window size");
@@ -47,12 +47,19 @@ void Application::initialize() {
     const std::string_view utf8Pref{pref.get()};
     const std::filesystem::path prefPath{std::u8string(utf8Pref.begin(),utf8Pref.end())};
     renderer_.initialize(table_,prefPath/"cards");
+    network_.setResumeDirectory(prefPath/"sessions");
     SDL_Log("Card cache root: %s",pref.get());
     camera_.update(0.0F, player_.position(), player_.seat(), room_, true);
     SDL_Log("WASD: move | Shift: run | RMB-drag: camera / table pan | wheel: zoom | E: sit/stand | Esc: stand/pause | Q: quit while paused");
 }
 void Application::openConnectionMenu() {
-    controls_.cancel();network_.stop();haveRemote_=false;room_=Room{};player_=Player{};
+    controls_.cancel();
+    controls_.setViewer(-1);
+    controls_.setCommandSink({});
+    network_.stop();
+    if(localTable_) {table_=std::move(*localTable_);localTable_.reset();}
+    for(auto& smoother:smoothers_) smoother.reset();
+    haveRemote_=false;room_=Room{};player_=Player{};
     connection_.menu=true;connection_.editingAddress=false;connection_.networked=false;
     connection_.status="CHOOSE LOCAL, HOST, OR JOIN";paused_=false;camera_.reset();
     SDL_StopTextInput(window_);
@@ -79,13 +86,21 @@ bool Application::connectionEvent(const SDL_Event& event) {
         if(key==SDLK_BACKSPACE && !connection_.address.empty()) connection_.address.pop_back();
         if(key==SDLK_ESCAPE) {connection_.editingAddress=false;SDL_StopTextInput(window_);}
         if(key==SDLK_RETURN && network_.join(connection_.address)) {
-            connection_.menu=false;connection_.editingAddress=false;SDL_StopTextInput(window_);paused_=false;
+            if(!localTable_) {localTable_=table_;}
+            controls_.setCommandSink([this](const TableCommand& c){network_.command(c);});connection_.menu=false;connection_.editingAddress=false;SDL_StopTextInput(window_);paused_=false;
         }
         if(key==SDLK_RETURN) connection_.status=network_.status();
     } else {
         if(key==SDLK_Q || key==SDLK_ESCAPE) running_=false;
         if(key==SDLK_L) {connection_.menu=false;paused_=false;}
-        if(key==SDLK_H) {if(network_.host()) {connection_.menu=false;paused_=false;}connection_.status=network_.status();}
+        if(key==SDLK_H) {
+            if(network_.host()) {
+                if(!localTable_) {localTable_=table_;}
+                controls_.setCommandSink([this](const TableCommand& c){network_.command(c);});
+                connection_.menu=false;paused_=false;
+            }
+            connection_.status=network_.status();
+        }
         if(key==SDLK_J) {connection_.editingAddress=true;SDL_StartTextInput(window_);}
     }
     return true;
@@ -96,23 +111,21 @@ void Application::updateNetwork(float dt,net::MovementInput input) {
     connection_.side=network_.localSide();connection_.status=network_.status();
     const auto& state=network_.state();const int side=network_.localSide();
     const auto& own=state.pawns[static_cast<std::size_t>(side)];
-    if(network_.ready()) player_.applyNetworkState(own.position,own.yaw,own.seat);
+    const auto displayedOwn=network_.mode()==net::Mode::Guest ? smoothers_[static_cast<std::size_t>(side)].update(own,state.tick,dt):own;
+    if(network_.ready()) player_.applyNetworkState(displayedOwn.position,displayedOwn.yaw,own.seat);
     const auto& other=state.pawns[static_cast<std::size_t>(1-side)];
-    const bool wasVisible=haveRemote_;haveRemote_=other.connected;
+    haveRemote_=other.connected;
     if(haveRemote_) {
-        Vec2 target=other.position;float yaw=other.yaw;
-        if(wasVisible && other.seat<0 && remote_.seat()<0 && distanceSquared(remote_.position(),target)<4) {
-            const float t=1-std::exp(-15*dt);const auto old=remote_.position();
-            target={old.x+(target.x-old.x)*t,old.z+(target.z-old.z)*t};
-            yaw=remote_.yaw()+std::remainder(yaw-remote_.yaw(),6.283185307F)*t;
-        }
-        remote_.applyNetworkState(target,yaw,other.seat);
-    }
+        const auto displayed=smoothers_[static_cast<std::size_t>(1-side)].update(other,state.tick,dt);
+        remote_.applyNetworkState(displayed.position,displayed.yaw,other.seat);
+    } else smoothers_[static_cast<std::size_t>(1-side)].reset();
+    if(network_.syncTable(table_)) controls_.refreshSelection();
+    connection_.tableStatus=network_.tableStatus();
     for(int i=0;i<2;++i) {
         room_.releaseSeat(i);
         for(const auto& p:state.pawns) if(p.seat==i) room_.claimSeat(i);
     }
-    controls_.setViewer(-1);
+    controls_.setViewer(network_.ready() && player_.seated()?side:-1);
 }
 void Application::pointer(float x,float y) {
     int w=1,h=1;
@@ -144,15 +157,15 @@ void Application::processEvents() {
                 else paused_=true;
                 break;
             case SDLK_Q: if(paused_) running_=false;break;
-            case SDLK_F5: if(network_.active()) network_.reconnect();break;
+            case SDLK_F5: if(network_.active()) {controls_.cancel();network_.reconnect();}break;
             case SDLK_E:
-                if(!paused_ && !table_.dragging()) {controls_.cancel();if(network_.active()) network_.interact();else player_.interact(room_);controls_.setViewer(network_.active()?-1:player_.seat());}
+                if(!paused_ && !controls_.dragging()) {controls_.cancel();if(network_.active()) network_.interact();else player_.interact(room_);controls_.setViewer(network_.active()?(player_.seated()?network_.localSide():-1):player_.seat());}
                 break;
             case SDLK_G: if(!paused_ && !network_.active()) {controls_.cancel();room_.toggleCapacityPreview();}break;
             case SDLK_HOME: if(!paused_) camera_.reset();break;
             default: break;
             }
-            if(!paused_ && !network_.active() && player_.seated() && !room_.capacityPreviewEnabled()) {
+            if(!paused_ && (!network_.active() || network_.ready()) && player_.seated() && !room_.capacityPreviewEnabled()) {
                 switch(event.key.key) {
                 case SDLK_T: controls_.action(TableAction::Tap);break;
                 case SDLK_F: controls_.action(TableAction::Flip);break;
@@ -169,12 +182,12 @@ void Application::processEvents() {
             }
         }
         if(paused_) continue;
-        const bool active=!network_.active() && player_.seated() && !room_.capacityPreviewEnabled();
+        const bool active=(!network_.active() || network_.ready()) && player_.seated() && !room_.capacityPreviewEnabled();
         if(event.type==SDL_EVENT_MOUSE_MOTION) {
             pointer(event.motion.x,event.motion.y);
             if(active) controls_.pointerMove(mouseX_,mouseY_,pointerRay());
             const bool panButtons=(event.motion.state & (SDL_BUTTON_RMASK|SDL_BUTTON_MMASK))!=0;
-            if(panButtons && !table_.dragging() && !controls_.inspectionOpen() && !controls_.menuOpen()) {
+            if(panButtons && !controls_.dragging() && !controls_.inspectionOpen() && !controls_.menuOpen()) {
                 if(player_.seated()) camera_.pan(-event.motion.xrel*0.006F,-event.motion.yrel*0.006F,player_.seat());
                 else camera_.orbit(-event.motion.xrel*0.006F,event.motion.yrel*0.006F);
             }
@@ -193,7 +206,7 @@ void Application::processEvents() {
         if(event.type==SDL_EVENT_MOUSE_WHEEL) {
             float x=0,y=0;SDL_GetMouseState(&x,&y);pointer(x,y);
             const float amount=event.wheel.direction==SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y:event.wheel.y;
-            if(!(active && controls_.wheel(amount,mouseX_,mouseY_)) && !table_.dragging()) camera_.zoom(amount,player_.seated());
+            if(!(active && controls_.wheel(amount,mouseX_,mouseY_)) && !controls_.dragging()) camera_.zoom(amount,player_.seated());
         }
     }
 }
@@ -203,7 +216,7 @@ int Application::run() {
     auto previous = Clock::now();
     while (running_) {
         const auto now = Clock::now();
-        const float dt = std::clamp(std::chrono::duration<float>(now-previous).count(), 0.0F, 0.05F);
+        const float dt = std::clamp(std::chrono::duration<float>(now-previous).count(), 0.0F, 0.1F);
         previous = now;
         processEvents();
         if (!running_) break;

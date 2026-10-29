@@ -8,16 +8,16 @@
 #include <vector>
 
 namespace fl::net {
-// This room-only protocol deliberately contains no card-instance fields.
-inline constexpr std::uint16_t protocolVersion=1;
-inline constexpr std::uint32_t buildVersion=0x00030000;
+// Pawn snapshots are unreliable; table commands and filtered views are reliable.
+inline constexpr std::uint16_t protocolVersion=2;
+inline constexpr std::uint32_t buildVersion=0x00030100;
 inline constexpr std::uint16_t defaultPort=33445;
-inline constexpr std::size_t maxPacketBytes=512;
+inline constexpr std::size_t maxPacketBytes=32768;
 using Token=std::array<std::uint32_t,4>;
 struct MovementInput {float sideways=0,forward=0,yaw=0;bool run=false;};
 struct PawnState {Vec2 position{};float yaw=0;int seat=-1;bool connected=false;};
 struct RoomState {std::uint64_t tick=0;std::array<PawnState,2> pawns{};};
-enum class Kind:std::uint8_t {Hello=1,Welcome,Input,Interact,Stand,State,Reject};
+enum class Kind:std::uint8_t {Hello=1,Welcome,Input,Interact,Stand,State,Reject,CardCommand,TableState,CardReply};
 enum class Rejection:std::uint8_t {Version=1,Content,Full,Resume};
 struct Message {
     Kind kind=Kind::Hello;
@@ -26,6 +26,7 @@ struct Message {
     Token token{};
     MovementInput input{};
     RoomState state{};
+    std::vector<std::uint8_t> payload;
     Rejection rejection=Rejection::Version;
 };
 std::vector<std::uint8_t> encode(const Message& message);
